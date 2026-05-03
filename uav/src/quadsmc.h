@@ -1,5 +1,5 @@
 //  created:    2025/03/02
-//  filename:   customCtrl.h
+//  filename:   quadsmc.h
 //
 //  author:     ateveraz
 //
@@ -10,8 +10,8 @@
 //
 /*********************************************************************/
 
-#ifndef CUSTOMCTRL_H
-#define CUSTOMCTRL_H
+#ifndef quadsmc_H
+#define quadsmc_H
 
 #include <UavStateMachine.h>
 #include "myCtrl.h"
@@ -37,10 +37,10 @@ namespace flair {
     }
 }
 
-class customCtrl : public flair::meta::UavStateMachine {
+class quadsmc : public flair::meta::UavStateMachine {
     public:
-        customCtrl(flair::sensor::TargetController *controller);
-        ~customCtrl();
+        quadsmc(flair::sensor::TargetController *controller);
+        ~quadsmc();
 
     private:
 
@@ -105,4 +105,4 @@ class customCtrl : public flair::meta::UavStateMachine {
         flair::gui::DoubleSpinBox *desired_yaw;
 };
 
-#endif // CUSTOMCTRL_H
+#endif // quadsmc_H
