@@ -15,6 +15,7 @@
 
 #include <UavStateMachine.h>
 #include "myCtrl.h"
+#include "myTrajectory.h"
 
 namespace flair {
     namespace gui {
@@ -28,6 +29,7 @@ namespace flair {
     namespace filter {
         class TrajectoryGenerator2DCircle;
         class MyController;
+        class MyTrajectory;
     }
     namespace meta {
         class MetaVrpnObject;
@@ -49,7 +51,8 @@ class quadsmc : public flair::meta::UavStateMachine {
             PositionHold,
             Circle, 
             Regulation, 
-            Hover
+            Hover, 
+            Trajectory
         };
 
     enum class ControlMode_t {
@@ -81,6 +84,7 @@ class quadsmc : public flair::meta::UavStateMachine {
 
         flair::filter::Pid *uX, *uY;
         flair::filter::MyController *myCtrl;
+        flair::filter::MyTrajectory *myPlanner;
 
         flair::core::Vector2Df posHold;
         float yawHold;

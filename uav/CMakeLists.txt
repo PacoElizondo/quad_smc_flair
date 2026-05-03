@@ -12,6 +12,7 @@ SET(SRC_FILES
 	src/main.cpp
 	src/quadsmc.cpp
     src/myCtrl.cpp
+    src/myTrajectory.cpp
 )
 
 FLAIR_DEMO(${PROJECT_NAME} "${SRC_FILES}"

@@ -86,6 +86,7 @@ quadsmc::quadsmc(TargetController *controller): UavStateMachine(controller), beh
     task_selection->AddItem("Hovering at zero");
     task_selection->AddItem("Regulation task");
     task_selection->AddItem("Circle tracking");
+    task_selection->AddItem("Trajectory tracking");
 
     desired_position = new Vector3DSpinBox(task_selection_box->NewRow(), "Desired position", -3, 3, 0.1, 3);
     desired_yaw = new DoubleSpinBox(task_selection_box->LastRowLastCol(), "Desired yaw", -M_PI, M_PI, 0.1, 3);
@@ -105,6 +106,9 @@ quadsmc::quadsmc(TargetController *controller): UavStateMachine(controller), beh
     // Custom control law
     Tab *setup_custom_controller = new Tab(getFrameworkManager()->GetTabWidget(),"Custom controller");
     myCtrl = new MyController(setup_custom_controller->At(0,0),"Parameters");
+
+    Tab *setup_path_planner = new Tab(getFrameworkManager()->GetTabWidget(),"Path planner");
+    myPlanner = new MyTrajectory(setup_path_planner->At(0,0),"Parameters");
 
     customReferenceOrientation= new AhrsData(this,"reference");
     uav->GetAhrs()->AddPlot(customReferenceOrientation,DataPlot::Yellow);
@@ -332,6 +336,14 @@ void quadsmc::PositionValues(Vector2Df &pos_error,Vector2Df &vel_error,float &ya
         vel_error=uav_2Dvel;
         yaw_ref=(float)desired_yaw->Value();
     }
+    else if (behaviourMode==BehaviourMode_t::Trajectory) {
+        myPlanner->Update(GetTime());
+        Vector2Df desired_position_xy(myPlanner->Output(0), myPlanner->Output(1));
+        Vector2Df desired_velocity_xy(myPlanner->Output(3), myPlanner->Output(4));
+        pos_error=uav_2Dpos - desired_position_xy;
+        vel_error=uav_2Dvel - desired_velocity_xy;
+        yaw_ref = 0; // You can also define a desired yaw reference for the trajectory if needed.
+    }
     else { //Circle
         Vector3Df target_pos;
         Vector2Df circle_pos,circle_vel;
@@ -482,6 +494,13 @@ void quadsmc::Start_task(void) {
         uY->Reset();
         behaviourMode=BehaviourMode_t::Circle;
         Thread::Info("quadsmc: circle tracking\n");
+    }
+    else if (task_selection->CurrentIndex() == 3) {
+        myPlanner->Reset();
+        uX->Reset();
+        uY->Reset();
+        behaviourMode=BehaviourMode_t::Trajectory;
+        Thread::Info("quadsmc: trajectory tracking\n");
     }
     else {
         Thread::Err("quadsmc: unknown task\n");
