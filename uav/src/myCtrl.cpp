@@ -26,7 +26,7 @@ using namespace flair::filter;
 
 MyController::MyController(const LayoutPosition *position, const string &name)
     : ControlLaw(position->getLayout(), name, 4), first_update(true),
-      delta_t(0.001F), initial_time(0.0F) {
+  delta_t(0.001F), initial_time(0.0F), current_time(0.0F) {
   // Input matrix
   input = new Matrix(this, 4, 6, floatType, name);
 
@@ -99,9 +99,6 @@ void MyController::UpdateFrom(const io_data *data) {
   auto mass_val = (float)mass->Value();
   const float gravity = 9.81;
   const Vector3Df J_diag = Vector3Df(0.002237568F, 0.002985236F, 0.00480374F);
-  Quaternion q_desired_prev;
-  Vector3Df omega_desired_prev;
-
   // if (deltaT_custom->Value() == 0) {
   //   delta_t = (float)(data->DataDeltaTime()) / 1000000000.0F;
   // } else {
@@ -115,8 +112,10 @@ void MyController::UpdateFrom(const io_data *data) {
     q_desired_prev = Quaternion(1.0F, 0.0F, 0.0F, 0.0F);
     omega_desired_prev = Vector3Df(0.0F, 0.0F, 0.0F);
     input->GetMutex();
-    pos_error_0 = (input->Value(0, 0), input->Value(1, 0), input->Value(2, 0));
-    vel_error_0 = (input->Value(0, 1), input->Value(1, 1), input->Value(2, 1));
+    pos_error_0 = Vector3Df(input->Value(0, 0), input->Value(1, 0),
+                            input->Value(2, 0));
+    vel_error_0 = Vector3Df(input->Value(0, 1), input->Value(1, 1),
+                            input->Value(2, 1));
     Surface_pos_t0 = vel_error_0 + Lambda_pos->Value() * pos_error_0;
     input->ReleaseMutex();
   }
@@ -315,7 +314,7 @@ void MyController::SetValues(const Vector3Df &pos_error,
   input->SetValue(2, 4, omega.z);
 
   // Set yaw reference
-  // input->SetValue(0, 5, yaw_ref);
+  input->SetValue(0, 5, yaw_ref);
   input->ReleaseMutex();
 }
 

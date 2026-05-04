@@ -191,29 +191,22 @@ void quadsmc::computeMyCtrl(Euler &torques) {
   ahrsEuler.yaw = vrpn_quaternion.ToEuler().yaw;
   Quaternion mixQuaternion = ahrsEuler.ToQuaternion();
 
-  Vector3Df pos_err, vel_err, acc_des;
-
-  // Compute the position and velocity errors in the UAV frame
+  Vector3Df pos_error, vel_error;
+  Vector3Df acc_des;
   // Vector2Df pos_error2D, vel_error2D;
-  // Vector3Df pos_error, vel_error, acc_des;
-  // Example of desired altitude [m] => (ALWAYS A POSITIVE VALUE)
-  // Because the AltitudeValues function returns a positive value also. However,
-  // the UAV's altitude is negative in the VRPN coordinate system.
-  float altittude_desired = desired_position->Value().z;
-  float yaw_ref;
-  float z, dz;
-  AltitudeValues(z, dz);
-  PositionValues(pos_err, vel_err, acc_des, yaw_ref);
-  // Notice that the error definition is current - desired for x,y and z.
-  // Vector3Df pos_error = Vector3Df(pos_error3D.x, pos_error3D.y,
-  // pos_error3D.z); Vector3Df vel_error = Vector3Df(vel_error3D.x,
-  // vel_error3D.y, vel_error3D.z); Vector3Df acc_desired = acc_des3D; Set the
-  // values of the custom controller and update it
-  std::cout << pos_err.x << pos_err.y << pos_err.z
-            << " pos_err @ computeMyCtrl \n";
 
-  myCtrl->SetValues(pos_err, vel_err, acc_des, mixQuaternion,
-                    currentAngularSpeed, yaw_ref);
+  float yaw_ref = 0;
+
+  computeCartesianErrors(pos_error, vel_error, acc_des, yaw_ref);
+  // PositionValues(pos_error2D, vel_error2D, yaw_ref);
+
+
+  // Vector3Df pos_error(pos_error2D.x, pos_error2D.y, 0); 
+  // Vector3Df vel_error(vel_error2D.x, vel_error2D.y, 0);
+  
+  std::cout << pos_error.x << pos_error.y << pos_error.z << " pos_error @ computeMyCtrl" << "\n";
+
+  myCtrl->SetValues(pos_error, vel_error, acc_des, mixQuaternion, currentAngularSpeed, yaw_ref);
   myCtrl->Update(GetTime());
 
   // // Apply the computed torques and thrust
@@ -318,13 +311,12 @@ void quadsmc::AltitudeValues(float &z, float &dz) const {
 }
 
 AhrsData *quadsmc::GetReferenceOrientation(void) {
-  Vector3Df pos_err;
-  Vector3Df vel_err;
-  Vector3Df acc_des; // in Uav coordinate system
-  float yaw_ref;
+  Vector2Df pos_err;
+  Vector2Df vel_err;
+  float yaw_ref = 0;
   Euler refAngles;
 
-  PositionValues(pos_err, vel_err, acc_des, yaw_ref);
+  PositionValues(pos_err, vel_err, yaw_ref);
 
   refAngles.yaw = yaw_ref;
 
@@ -342,82 +334,117 @@ AhrsData *quadsmc::GetReferenceOrientation(void) {
   return customReferenceOrientation;
 }
 
-void quadsmc::PositionValues(Vector3Df &pos_error, Vector3Df &vel_error,
-                             Vector3Df &acc_desired, float &yaw_ref) {
-  Vector3Df uav_pos, uav_vel; // in VRPN coordinate system
-  //   Vector2Df uav_2Dpos, uav_2Dvel; // in VRPN coordinate system
+void quadsmc::PositionValues(Vector2Df &pos_error,Vector2Df &vel_error,float &yaw_ref) {
+    Vector3Df uav_pos,uav_vel; // in VRPN coordinate system
+    Vector2Df uav_2Dpos,uav_2Dvel; // in VRPN coordinate system
 
-  std::cout << "behaviourMode: " << (int)behaviourMode << "\n";
-  uavVrpn->GetPosition(uav_pos);
-  uavVrpn->GetSpeed(uav_vel);
+    uavVrpn->GetPosition(uav_pos);
+    uavVrpn->GetSpeed(uav_vel);
 
-  // std::cout << uav_pos.x << uav_pos.y << uav_pos.z << " uav_pos \n";
+    uav_pos.To2Dxy(uav_2Dpos);
+    uav_vel.To2Dxy(uav_2Dvel);
 
-  //   uav_pos.To2Dxy(uav_2Dpos);
-  //   uav_vel.To2Dxy(uav_2Dvel);
+    if (behaviourMode==BehaviourMode_t::PositionHold) {
+        pos_error=uav_2Dpos-posHold;
+        vel_error=uav_2Dvel;
+        yaw_ref=yawHold;
+    } 
+    else if (behaviourMode==BehaviourMode_t::Hover) {
+        pos_error=uav_2Dpos;
+        vel_error=uav_2Dvel;
+        yaw_ref=0;
+    } 
+    else if (behaviourMode==BehaviourMode_t::Regulation) {
+        Vector2Df desired_position_xy(desired_position->Value().x, desired_position->Value().y);
+        pos_error=uav_2Dpos - desired_position_xy;
+        vel_error=uav_2Dvel;
+        yaw_ref=(float)desired_yaw->Value();
+    }
+    else if (behaviourMode==BehaviourMode_t::Trajectory) {
+        myPlanner->Update(GetTime());
+        Vector2Df desired_position_xy(myPlanner->Output(0), myPlanner->Output(1));
+        Vector2Df desired_velocity_xy(myPlanner->Output(3), myPlanner->Output(4));
+        pos_error=uav_2Dpos - desired_position_xy;
+        vel_error=uav_2Dvel - desired_velocity_xy;
+        yaw_ref = 0; // You can also define a desired yaw reference for the trajectory if needed.
+    }
+    else { //Circle
+        Vector3Df target_pos;
+        Vector2Df circle_pos,circle_vel;
+        Vector2Df target_2Dpos;
 
-  if (behaviourMode == BehaviourMode_t::PositionHold) {
-    pos_error = uav_pos - posHold;
-    vel_error = uav_vel;
-    yaw_ref = yawHold;
-  } else if (behaviourMode == BehaviourMode_t::Hover) {
-    pos_error = uav_pos;
-    vel_error = uav_vel;
-    yaw_ref = 0;
-  } else if (behaviourMode == BehaviourMode_t::Regulation) {
+        targetVrpn->GetPosition(target_pos);
+        target_pos.To2Dxy(target_2Dpos);
+        circle->SetCenter(target_2Dpos);
 
-    Vector3Df desired_position_xyz =
-        Vector3Df(desired_position->Value().x, desired_position->Value().y,
-                  desired_position->Value().z);
-    pos_error = uav_pos - desired_position_xyz;
-    vel_error = uav_vel;
-    yaw_ref = (float)desired_yaw->Value();
-  } else if (behaviourMode == BehaviourMode_t::Trajectory) {
-    myPlanner->SetValues(uav_pos);
-    myPlanner->Update(GetTime());
+        //circle reference
+        circle->Update(GetTime());
+        circle->GetPosition(circle_pos);
+        circle->GetSpeed(circle_vel);
 
-    Vector3Df desired_position_xyz(myPlanner->Output(0), myPlanner->Output(1),
-                                   myPlanner->Output(2));
-    Vector3Df desired_velocity(myPlanner->Output(3), myPlanner->Output(4),
-                               myPlanner->Output(5));
-    pos_error = uav_pos - desired_position_xyz;
-    vel_error = uav_vel - desired_velocity;
-    acc_desired = Vector3Df(myPlanner->Output(6), myPlanner->Output(7),
-                            myPlanner->Output(8));
+        //error in optitrack frame
+        pos_error=uav_2Dpos-circle_pos;
+        vel_error=uav_2Dvel-circle_vel;
+        yaw_ref=atan2(target_pos.y-uav_pos.y,target_pos.x-uav_pos.x);
+    }
 
-    std::cout << pos_error.x << pos_error.y << pos_error.z
-              << "pos_error @ quadsmc\n";
+    //error in uav frame
+    Quaternion currentQuaternion=GetCurrentQuaternion();
+    Euler currentAngles;//in vrpn frame
+    currentQuaternion.ToEuler(currentAngles);
+    pos_error.Rotate(-currentAngles.yaw);
+    vel_error.Rotate(-currentAngles.yaw);
+}
 
-    yaw_ref = 0; // You can also define a desired yaw reference for the
-                 // trajectory if needed.
-  } else {       // Circle
-    Vector3Df target_pos;
-    Vector2Df circle_pos, circle_vel;
-    Vector2Df target_2Dpos;
 
-    targetVrpn->GetPosition(target_pos);
-    target_pos.To2Dxy(target_2Dpos);
-    circle->SetCenter(target_2Dpos);
+void quadsmc::computeCartesianErrors(Vector3Df &pos_error, Vector3Df &vel_error, Vector3Df &xidpp, float &desiredYaw)
+{
+    Vector3Df uav_pos,uav_vel, charge_pos; // in VRPN coordinate system
+    Vector3Df xid, xidp; // desired position and speed
 
-    // circle reference
-    circle->Update(GetTime());
-    circle->GetPosition(circle_pos);
-    circle->GetSpeed(circle_vel);
+    uavVrpn->GetPosition(uav_pos);
+    uavVrpn->GetSpeed(uav_vel);
+    targetVrpn->GetPosition(charge_pos);
 
-    // error in optitrack frame
-    pos_error.x = uav_pos.x - circle_pos.x;
-    pos_error.y = uav_pos.y - circle_pos.y;
-    vel_error.x = uav_vel.x - circle_vel.x;
-    vel_error.y = uav_vel.y - circle_vel.y;
-    yaw_ref = atan2(target_pos.y - uav_pos.y, target_pos.x - uav_pos.x);
-  }
+    if (behaviourMode==BehaviourMode_t::Regulation) {
+        xid = Vector3Df(desired_position->Value().x, desired_position->Value().y, desired_position->Value().z );
+        pos_error=uav_pos - xid;
+        vel_error=uav_vel;
+        desiredYaw = (float)desired_yaw->Value();
+    }
+    else if (behaviourMode==BehaviourMode_t::Trajectory) {
+        myPlanner->SetValues(uav_pos);
+        myPlanner->Update(GetTime());
 
-  // error in uav frame
-  Quaternion currentQuaternion = GetCurrentQuaternion();
-  Euler currentAngles; // in vrpn frame
-  currentQuaternion.ToEuler(currentAngles);
-  pos_error.Rotate(-currentAngles.yaw);
-  vel_error.Rotate(-currentAngles.yaw);
+        xid =  Vector3Df(myPlanner->Output(0), myPlanner->Output(1), myPlanner->Output(2));
+        xidp = Vector3Df(myPlanner->Output(3), myPlanner->Output(4),myPlanner->Output(5));
+
+        pos_error = uav_pos - xid;
+        vel_error = uav_vel - xidp;
+
+        xidpp = Vector3Df(myPlanner->Output(6), myPlanner->Output(7), myPlanner->Output(8));
+        desiredYaw = 0.0; // You can also define a desired yaw reference for the trajectory if needed.
+    }
+    else { //Circle
+        Vector2Df circle_pos,circle_vel;
+        // Vector3Df xid, xidp; 
+    
+        circle->SetCenter(Vector2Df(0,0));
+
+        //circle reference
+        circle->Update(GetTime());
+        circle->GetPosition(circle_pos);
+        circle->GetSpeed(circle_vel);
+
+        //error in optitrack frame
+        xid  = Vector3Df(circle_pos.x, circle_pos.y, desired_position->Value().z);
+        xidp = Vector3Df(circle_vel.x, circle_vel.y, 0);
+        pos_error=uav_pos-xid;
+        vel_error=uav_vel-xidp;
+
+        // desiredYaw = atan2(0 - uav_pos.y, 0 - uav_pos.x); //yaw pointing to the center of the circle
+    }
+    // std::cout << "Desired position: " <<  xid.x << ", " << xid.y << ", " << xid.z << std::endl;
 }
 
 void quadsmc::SignalEvent(Event_t event) {
@@ -578,7 +605,8 @@ void quadsmc::VrpnPositionHold(void) {
 
   Vector3Df vrpnPosition;
   uavVrpn->GetPosition(vrpnPosition);
-  posHold = vrpnPosition;
+  vrpnPosition.To2Dxy(posHold);
+  posHold3D = vrpnPosition;
 
   uX->Reset();
   uY->Reset();

@@ -69,9 +69,8 @@ private:
   void ExtraCheckJoystick(void) override;
   const flair::core::AhrsData *GetOrientation(void) const override;
   void AltitudeValues(float &z, float &dz) const override;
-  void PositionValues(flair::core::Vector3Df &pos_error,
-                      flair::core::Vector3Df &vel_error,
-                      flair::core::Vector3Df &acc_desired, float &yaw_ref);
+  void PositionValues(flair::core::Vector2Df &pos_error,flair::core::Vector2Df &vel_error,float &yaw_ref);
+  void computeCartesianErrors(flair::core::Vector3Df &pos_error, flair::core::Vector3Df &vel_error, flair::core::Vector3Df &xidpp, float &desiredYaw);
   flair::core::AhrsData *GetReferenceOrientation(void) override;
   void SignalEvent(Event_t event) override;
   void ComputeCustomTorques(flair::core::Euler &torques);
@@ -85,7 +84,8 @@ private:
   flair::filter::MyController *myCtrl;
   flair::filter::MyTrajectory *myPlanner;
 
-  flair::core::Vector3Df posHold;
+  flair::core::Vector2Df posHold;
+  flair::core::Vector3Df posHold3D;
   float yawHold;
   float thrust;
 
