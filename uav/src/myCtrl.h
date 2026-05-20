@@ -2,6 +2,7 @@
 #define MYCTRL_H
 
 #include <ControlLaw.h>
+#include <Matrix.h>
 #include <Object.h>
 #include <Quaternion.h>
 #include <Vector3D.h>
@@ -56,8 +57,11 @@ private:
   flair::core::Vector3Df vel_error_0;
   flair::core::Vector3Df Surface_pos_t0;
   flair::core::Vector3Df omega_desired_prev;
+  flair::core::Vector3Df omega_desired;
   flair::core::Quaternion q_desired_prev;
   flair::core::Quaternion q_desired;
+  
+  float thrust_curr;
   float current_time;
 
   void plotCartesianErrors(const flair::gui::LayoutPosition *position);
