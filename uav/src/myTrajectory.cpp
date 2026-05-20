@@ -47,13 +47,13 @@ MyTrajectory::MyTrajectory(const LayoutPosition *position, const string &name)
   auto *gui_quadsmc = new GroupBox(position, name);
   auto *general_parameters = new GroupBox(gui_quadsmc->NewRow(), " ");
   deltaT_custom = new DoubleSpinBox(general_parameters->NewRow(),
-                                    "Custom dt [s]", 0, 1, 0.001, 4, 0.000);
+                                    "Custom dt [s]", 0, 0.01, 0.001, 4, 0.001);
   amplitude = new DoubleSpinBox(general_parameters->LastRowLastCol(),
                                 "Amplitude", 0, 10, 0.01, 4, 1.0);
-  z_rate = new DoubleSpinBox(general_parameters->NewRow(), "Z rate", 0, 10,
-                             0.01, 4, 0.0);
-  xy_rate = new DoubleSpinBox(general_parameters->NewRow(), "XY rate", 0, 10,
-                              0.01, 4, 0.5);
+  z_rate = new DoubleSpinBox(general_parameters->NewRow(), "Z rate", -0.05, 0.05,
+                             0.001, 4, 0.0);
+  xy_rate = new DoubleSpinBox(general_parameters->NewRow(), "XY rate", -2, 2,
+                              0.001, 4, 0.0);
 
   // Show cartesian errors plot
   plotCartesianErrors(gui_quadsmc->NewRow());
@@ -67,13 +67,11 @@ void MyTrajectory::UpdateFrom(const io_data *data) {
   if (first_update) {
 
     initial_time = float(GetTime()) / 1000000000.0F;
-    input->GetMutex();
-    pos_initial =
-        Vector3Df(input->Value(0, 0), input->Value(1, 0), input->Value(2, 0));
-    input->ReleaseMutex();
+
     first_update = false;
   }
 
+  bool calibration = false;
   // float current_time = (float(GetTime()) / 1000000000.0F);
 
   auto amplitude_value = (float)amplitude->Value();
@@ -86,39 +84,64 @@ void MyTrajectory::UpdateFrom(const io_data *data) {
     delta_t = (float)deltaT_custom->Value();
   }
 
-  current_time = current_time + delta_t;
+  // current_time = current_time + delta_t;
   // std::cout << current_time << "\n";
+  if (current_time < 0.1 && !calibration){
+    input->GetMutex();
+    pos_initial =
+    Vector3Df(input->Value(0, 0), input->Value(1, 0), input->Value(2, 0));
+    input->ReleaseMutex();
+    
+    // std::cout << current_time << "current_time @ myTraj \n";
+  } else { calibration = true;  }
 
+  current_time = current_time + delta_t;
   Vector3Df desired_position;
   Vector3Df desired_velocity;
   Vector3Df desired_acceleration;
   float ramp = 0.0F;
 
-  ramp = std::fmin(current_time / 2.0F, 1.0F);
+  ramp = std::fmin(current_time / 5.0F, 1.0F);
+  // std::cout << ramp << "ramp \n";
 
   desired_position.x =
-      (ramp * amplitude_value * std::sin(current_time * xy_rate_value)) +
-      pos_initial.x;
+      (ramp * amplitude_value * (std::sin(current_time * xy_rate_value))/xy_rate_value)+ pos_initial.x;
   desired_position.y =
-      (ramp * amplitude_value * std::cos(current_time * xy_rate_value)) +
-      pos_initial.y;
-  desired_position.z = (current_time * z_rate_value) + pos_initial.z;
+      (ramp * amplitude_value * (std::cos(current_time * xy_rate_value))/xy_rate_value) + pos_initial.y;
+  desired_position.z = (current_time * z_rate_value) - 1.5F;
+  // std::cout << current_time;
+  // std::cout << desired_position.x << "desired p x @ traj \n";
 
-  desired_velocity.x = (ramp * amplitude_value * xy_rate_value *
+  desired_velocity.x = (ramp * amplitude_value  *  
                         std::cos(current_time * xy_rate_value));
-  desired_velocity.y = (-ramp * amplitude_value * xy_rate_value *
+  desired_velocity.y = (-ramp * amplitude_value *  
                         std::sin(current_time * xy_rate_value));
   desired_velocity.z = (z_rate_value);
 
   desired_acceleration.x =
-      (-ramp * amplitude_value * xy_rate_value * xy_rate_value *
+      (-ramp * amplitude_value *
        std::sin(current_time * xy_rate_value));
   desired_acceleration.y =
-      (-ramp * amplitude_value * xy_rate_value * xy_rate_value *
+      (-ramp * amplitude_value *
        std::cos(current_time * xy_rate_value));
   desired_acceleration.z = (0.0F);
 
-  //    amplitude_value, std::cos(t * ), -a * sin(t * self.w), self.z_rate ])
+  // std::cout << pos_initial.z << "pos_initial.z @ traj\n";
+
+
+  // desired_position.x = pos_initial.x;
+  // desired_position.y = pos_initial.y;
+  // desired_position.z = 0;
+
+  // // std::cout << pos_initial.y << " posinitialy";
+
+  // desired_velocity.x = 0.0F;
+  // desired_velocity.y = 0.0F;
+  // desired_velocity.z = 0.0F;
+
+  // desired_acceleration.x = 0.0F;
+  // desired_acceleration.y = 0.0F;
+  // desired_acceleration.z = 0.0F;
 
   // Send desired position
   output->SetValue(0, 0, desired_position.x);
