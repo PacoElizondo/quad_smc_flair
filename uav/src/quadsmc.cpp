@@ -522,13 +522,13 @@ void quadsmc::ExtraCheckJoystick(void) {
   // R1 and Circle
   if (GetTargetController()->ButtonClicked(4) &&
       GetTargetController()->IsButtonPressed(9)) {
-    Start_task();
+      StartCustomTorques();
   }
 
   // R1 and Cross
   if (GetTargetController()->ButtonClicked(5) &&
       GetTargetController()->IsButtonPressed(9)) {
-    StopCircle();
+    StopCustomTorques();
   }
 
   // R1 and Square
