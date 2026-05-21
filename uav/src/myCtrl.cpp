@@ -101,7 +101,7 @@ void MyController::UpdateFrom(const io_data *data) {
   const float gravity = 9.81;
   // const Vector3Df J_diag = Vector3Df(0.000002098,  0.000002102, 0.000004068);
   
-  const Vector3Df J_diag = Vector3Df(0.006,  0.006, 0.1);
+  const Vector3Df J_diag = Vector3Df(0.00209,  0.002102, 0.00406);
   // if (deltaT_custom->Value() == 0) {
   //   delta_t = (float)(data->DataDeltaTime()) / 1000000000.0F;
   // } else {
@@ -177,19 +177,19 @@ void MyController::UpdateFrom(const io_data *data) {
       Vector3Df(-(mass_val * Lambda_pos_val.x * vel_error.x) -
                     (mass_val * K_pos_val.x * 
                      tanhf(surface_pos.x)) + acc_desired.x
-                     -sqrtf(fabsf(surface_pos.x)) * tanhf(surface_pos.x)
+                    //  -sqrtf(fabsf(surface_pos.x)) * tanhf(surface_pos.x)
                      + (mass_val * K_surf_pos_t0_val.x * Surface_pos_t0.x *
                      expf(-K_surf_pos_t0_val.x * current_time))*0,
                 -(mass_val * Lambda_pos_val.y * vel_error.y) -
                     (mass_val * K_pos_val.y * 
                      tanhf(surface_pos.y)) + acc_desired.y 
-                     - sqrtf(fabsf(surface_pos.y)) * tanhf(surface_pos.y)
+                    //  - sqrtf(fabsf(surface_pos.y)) * tanhf(surface_pos.y)
                      + (mass_val * K_surf_pos_t0_val.y * Surface_pos_t0.y *
                      expf(-K_surf_pos_t0_val.y * current_time))*0,
                 -(mass_val * Lambda_pos_val.z * vel_error.z) -
                     (mass_val * K_pos_val.z * 
                      tanhf(surface_pos.z)) - (mass_val*g) + acc_desired.z
-                     - sqrtf(fabsf(surface_pos.z)) * tanhf(surface_pos.z)
+                    //  - sqrtf(fabsf(surface_pos.z)) * tanhf(surface_pos.z)
                      + (mass_val * K_surf_pos_t0_val.z * Surface_pos_t0.z *
                  expf(-K_surf_pos_t0_val.z * current_time))*0 
       );
