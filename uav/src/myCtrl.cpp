@@ -175,18 +175,21 @@ void MyController::UpdateFrom(const io_data *data) {
   
   Vector3Df surface_pos_dot =
       Vector3Df(-(mass_val * Lambda_pos_val.x * vel_error.x) -
-                    (mass_val * K_pos_val.x * sqrtf(fabsf(surface_pos.x))* 
+                    (mass_val * K_pos_val.x * 
                      tanhf(surface_pos.x)) + acc_desired.x
+                     -sqrtf(fabsf(surface_pos.x)) * tanhf(surface_pos.x)
                      + (mass_val * K_surf_pos_t0_val.x * Surface_pos_t0.x *
                      expf(-K_surf_pos_t0_val.x * current_time))*0,
                 -(mass_val * Lambda_pos_val.y * vel_error.y) -
-                    (mass_val * K_pos_val.y * sqrtf(fabsf(surface_pos.y))*
-                     tanhf(surface_pos.y)) + acc_desired.y
+                    (mass_val * K_pos_val.y * 
+                     tanhf(surface_pos.y)) + acc_desired.y 
+                     - sqrtf(fabsf(surface_pos.y)) * tanhf(surface_pos.y)
                      + (mass_val * K_surf_pos_t0_val.y * Surface_pos_t0.y *
                      expf(-K_surf_pos_t0_val.y * current_time))*0,
                 -(mass_val * Lambda_pos_val.z * vel_error.z) -
-                    (mass_val * K_pos_val.z * sqrtf(fabsf(surface_pos.z))*
+                    (mass_val * K_pos_val.z * 
                      tanhf(surface_pos.z)) - (mass_val*g) + acc_desired.z
+                     - sqrtf(fabsf(surface_pos.z)) * tanhf(surface_pos.z)
                      + (mass_val * K_surf_pos_t0_val.z * Surface_pos_t0.z *
                  expf(-K_surf_pos_t0_val.z * current_time))*0 
       );
