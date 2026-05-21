@@ -92,7 +92,7 @@ MyController::~MyController() { delete state; }
 
 void MyController::UpdateFrom(const io_data *data) {
   // float current_time = (float(GetTime()) / 1000000000.0F) - initial_time;
-  std::cout << current_time << "\n";
+  // std::cout << current_time << "\n";
   current_time = current_time + delta_t;
   Vector3Df u_position;
   Vector3Df tau;
@@ -211,7 +211,7 @@ void MyController::UpdateFrom(const io_data *data) {
   
     q_desired.Normalize();
     // std::cout << q_desired.q0 << "," << q_desired.q1 << "," << q_desired.q2 << "," << q_desired.q3 << " q_des \n";
-    std::cout << thrust_norm << " thrust norm \n";
+    // std::cout << thrust_norm << " thrust norm \n";
 
 
     
@@ -303,7 +303,7 @@ void MyController::UpdateFrom(const io_data *data) {
   
 
   // std::cout << att_error.x << att_error.y << att_error.z << "att_error y \n";
-
+      std::cout << att_error.x << ", " << att_error.y << ", " << att_error.z << "\n";
 
 
   // #TODO: obtain analitic derivative for omega desired and omega_desired_dot
@@ -429,9 +429,9 @@ void MyController::plotCartesianErrors(const LayoutPosition *position) {
   // remember to set its value in the UpdateFrom function and to add it to the
   // log_labels matrix in the constructor.
   auto *plot = new DataPlot1D(position, "Cartesian errors", -1, 1);
-  plot->AddCurve(state->Element(0), DataPlot::Red);   // x error
-  plot->AddCurve(state->Element(1), DataPlot::Black); // y error
-  plot->AddCurve(state->Element(2), DataPlot::Blue);  // yaw error
+  plot->AddCurve(output->Element(0), DataPlot::Red);   // x error
+  plot->AddCurve(output->Element(1), DataPlot::Black); // y error
+  plot->AddCurve(output->Element(2), DataPlot::Blue);  // yaw error
 }
 
 // void MyController::plotCartesianErrors(const LayoutPosition *position) {
