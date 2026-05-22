@@ -65,6 +65,7 @@ private:
   float current_time;
 
   void plotCartesianErrors(const flair::gui::LayoutPosition *position);
+  void plotQuaternionErrors(const flair::gui::LayoutPosition *position);
 };
 } // namespace filter
 } // namespace flair

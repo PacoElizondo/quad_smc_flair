@@ -32,14 +32,18 @@ MyController::MyController(const LayoutPosition *position, const string &name)
   input = new Matrix(this, 4, 6, floatType, name);
 
   // Matrix descriptor for logging. It should be always a nx1 matrix.
-  auto *log_labels = new MatrixDescriptor(7, 1);
+  auto *log_labels = new MatrixDescriptor(11, 1);
   log_labels->SetElementName(0, 0, "x_error");
   log_labels->SetElementName(1, 0, "y_error");
-  log_labels->SetElementName(2, 0, "yaw_error");
-  log_labels->SetElementName(3, 0, "tau_x");
-  log_labels->SetElementName(4, 0, "tau_y");
-  log_labels->SetElementName(5, 0, "tau_z");
-  log_labels->SetElementName(6, 0, "thrust");
+  log_labels->SetElementName(2, 0, "z_error");
+  log_labels->SetElementName(3, 0, "q0_e");
+  log_labels->SetElementName(4, 0, "q1_e");
+  log_labels->SetElementName(5, 0, "q2_e");
+  log_labels->SetElementName(6, 0, "q3_e");
+  log_labels->SetElementName(7, 0, "tau_x"); 
+  log_labels->SetElementName(8, 0, "tau_y"); 
+  log_labels->SetElementName(9, 0, "tau_z"); 
+  log_labels->SetElementName(10, 0,"thrust");
 
   state = new Matrix(this, log_labels, floatType, name);
   delete log_labels;
@@ -84,7 +88,8 @@ MyController::MyController(const LayoutPosition *position, const string &name)
 
   // Show cartesian errors plot
   plotCartesianErrors(gui_quadsmc->NewRow());
-
+  plotQuaternionErrors(gui_quadsmc->NewRow());
+  
   AddDataToLog(state);
 }
 
@@ -210,26 +215,25 @@ void MyController::UpdateFrom(const io_data *data) {
     
   
     q_desired.Normalize();
-    // std::cout << q_desired.q0 << "," << q_desired.q1 << "," << q_desired.q2 << "," << q_desired.q3 << " q_des \n";
     // std::cout << thrust_norm << " thrust norm \n";
-
-
     
 
+    
+    
   Quaternion body_z_world =
       q_desired * Quaternion(0.0F, 0.0F, 0.0F, 1.0F) * q_desired.GetConjugate();
 
   u_position.x = surface_pos_dot.x;
   u_position.y = surface_pos_dot.y;
   u_position.z = surface_pos_dot.z;
-
+  
 
   // float control_threshold = 1e-3;
 
-
+  
   float ctrl_z = DotProduct(u_position, Vector3Df(body_z_world.q1, body_z_world.q2, body_z_world.q3));
   u_position.Saturate((float)sat_pos->Value());
-
+  
   // u_position = Vector3Df(
   // (fabsf(u_position.x) < control_threshold) ? 0.0F : u_position.x,
   // (fabsf(u_position.y) < control_threshold) ? 0.0F : u_position.y,
@@ -237,7 +241,7 @@ void MyController::UpdateFrom(const io_data *data) {
   // );
 
 
-
+  
 //   // Computing omega desired from thrust vector
 //   Quaternion u_position_normalized_q = Quaternion(0.0, u_position.x/u_position.GetNorm(), u_position.y/u_position.GetNorm(), u_position.z/u_position.GetNorm());
 //   Quaternion thrust_curr_q = Quaternion(0.0,0.0,0.0,thrust_curr/mass_val);
@@ -249,11 +253,11 @@ void MyController::UpdateFrom(const io_data *data) {
 //   std::cout << acc_error.x << ", " << acc_error.y << ", " << acc_error.z << "acc_error \n ";
 
   
-  
+
   
 //   Vector3Df F_u_dot = Vector3Df(
-//     -(Lambda_pos_val.x * acc_error.x) - (K_pos_val.x*(1/coshf(u_position.x))*(1/coshf(u_position.x))),
-//     -(Lambda_pos_val.y * acc_error.y) - (K_pos_val.y*(1/coshf(u_position.y))*(1/coshf(u_position.y))),
+  //     -(Lambda_pos_val.x * acc_error.x) - (K_pos_val.x*(1/coshf(u_position.x))*(1/coshf(u_position.x))),
+  //     -(Lambda_pos_val.y * acc_error.y) - (K_pos_val.y*(1/coshf(u_position.y))*(1/coshf(u_position.y))),
 //     -(Lambda_pos_val.z * acc_error.z) - (K_pos_val.z*(1/coshf(u_position.z))*(1/coshf(u_position.z)))
 //   );
 
@@ -266,7 +270,7 @@ void MyController::UpdateFrom(const io_data *data) {
 //   );
 
 //   // std::cout << "F_u_dot: " << F_u_dot.x << ", " << F_u_dot.y << ", " << F_u_dot.z << "\n";
-  
+
 //   std::cout << "thrust_curr: " << thrust_curr << "\n";
 //   std::cout << "normalized thrust curr" << thrust_curr/thrust_norm << "\n";
 
@@ -297,16 +301,18 @@ void MyController::UpdateFrom(const io_data *data) {
 
 
   // Attitude controller
-
+  Quaternion q_heading = Quaternion(1.0,0.0,0.0,0.0);
+  q_desired = q_desired*q_heading;
+  
   Quaternion q_error = q_desired.GetConjugate() * quat;
   Vector3Df att_error = 2 * Vector3Df(q_error.q1,q_error.q2, q_error.q3);
   
+  std::cout << q_error.q0 << "," << q_error.q1 << "," << q_error.q2 << "," << q_error.q3 << " q_err \n";
 
   // std::cout << att_error.x << att_error.y << att_error.z << "att_error y \n";
-      std::cout << att_error.x << ", " << att_error.y << ", " << att_error.z << "\n";
+      
 
-
-  // #TODO: obtain analitic derivative for omega desired and omega_desired_dot
+  
   Quaternion q_desired_dot;
   
   // Vector3Df omega_desired =
@@ -377,10 +383,14 @@ Vector3Df surface_att_dot =
   state->SetValue(0, 0, pos_error.x);
   state->SetValue(1, 0, pos_error.y);
   state->SetValue(2, 0, pos_error.z);
-  state->SetValue(3, 0, tau.x);
-  state->SetValue(4, 0, tau.y);
-  state->SetValue(5, 0, tau.z);
-  state->SetValue(6, 0, thrust);
+  state->SetValue(3, 0, q_error.q0);
+  state->SetValue(4, 0, q_error.q1);
+  state->SetValue(5, 0, q_error.q2);
+  state->SetValue(6, 0, q_error.q3);
+  state->SetValue(7, 0, tau.x);
+  state->SetValue(8, 0, tau.y);
+  state->SetValue(9, 0, tau.z);
+  state->SetValue(10, 0, thrust);
   //   state->SetValue(2, 0, rpy.YawDistanceFrom(yaw_ref));
   state->ReleaseMutex();
 
@@ -429,21 +439,22 @@ void MyController::plotCartesianErrors(const LayoutPosition *position) {
   // remember to set its value in the UpdateFrom function and to add it to the
   // log_labels matrix in the constructor.
   auto *plot = new DataPlot1D(position, "Cartesian errors", -1, 1);
-  plot->AddCurve(output->Element(0), DataPlot::Red);   // x error
-  plot->AddCurve(output->Element(1), DataPlot::Black); // y error
-  plot->AddCurve(output->Element(2), DataPlot::Blue);  // yaw error
+  plot->AddCurve(state->Element(0), DataPlot::Red);   // x error
+  plot->AddCurve(state->Element(1), DataPlot::Black); // y error
+  plot->AddCurve(state->Element(2), DataPlot::Blue);  // z error
 }
 
-// void MyController::plotCartesianErrors(const LayoutPosition *position) {
-//   // Example of how to plot the position errors in the GUI.
-//   // Any variable that is defined in the state matrix can be plotted. Just
-//   // remember to set its value in the UpdateFrom function and to add it to the
-//   // log_labels matrix in the constructor.
-//   auto *plot = new DataPlot1D(position, "Cartesian errors", -1, 1);
-//   plot->AddCurve(output->Element(0), DataPlot::Red);   // x error
-//   plot->AddCurve(output->Element(1), DataPlot::Black); // y error
-//   plot->AddCurve(output->Element(2), DataPlot::Blue);  // yaw error
-// }
+void MyController::plotQuaternionErrors(const LayoutPosition *position) {
+  // Example of how to plot the position errors in the GUI.
+  // Any variable that is defined in the state matrix can be plotted. Just
+  // remember to set its value in the UpdateFrom function and to add it to the
+  // log_labels matrix in the constructor.
+  auto *plot = new DataPlot1D(position, "Quaternion errors", -1, 1);
+  // plot->AddCurve(state->Element(3), DataPlot::Red);   
+  plot->AddCurve(state->Element(4), DataPlot::Black); 
+  plot->AddCurve(state->Element(5), DataPlot::Blue);  
+  plot->AddCurve(state->Element(6), DataPlot::Green); 
+}
 
 void MyController::applyMotorConstant(Vector3Df &signal) {
   auto motor_constant = (float)k_motor->Value();
