@@ -304,10 +304,14 @@ void MyController::UpdateFrom(const io_data *data) {
   Quaternion q_heading = Quaternion(1.0,0.0,0.0,0.0);
   q_desired = q_desired*q_heading;
   
-  Quaternion q_error = q_desired.GetConjugate() * quat;
-  Vector3Df att_error = 2 * Vector3Df(q_error.q1,q_error.q2, q_error.q3);
+  Quaternion q_error = (q_desired.GetConjugate() * quat);
+  q_error.Normalize();
+  // Vector3Df att_error = 2 * Vector3Df(q_error.q1,q_error.q2, q_error.q3);
+  Vector3Df att_error = 2 * q_error.GetLogarithm();
   
-  std::cout << q_error.q0 << "," << q_error.q1 << "," << q_error.q2 << "," << q_error.q3 << " q_err \n";
+  std::cout << pos_error.x << ", " << pos_error.y << ", " << pos_error.z << " p_err \n";
+  std::cout << att_error.x << ", " << att_error.y << ", " << att_error.z << " att_err \n";
+  std::cout << q_error.q0 << ", " << q_error.q1 << ", " << q_error.q2 << ", " << q_error.q3 << " q_err \n";
 
   // std::cout << att_error.x << att_error.y << att_error.z << "att_error y \n";
       
@@ -334,7 +338,7 @@ void MyController::UpdateFrom(const io_data *data) {
   // J_diag * (-Lambda_att_val * omega_error + u_att_sw);
 Vector3Df surface_att_dot =
   CrossProduct(omega, (J_diag * omega)) +
-  J_diag*(- u_att_sw);
+  (- u_att_sw);
   
   
 
@@ -370,7 +374,7 @@ Vector3Df surface_att_dot =
     }
   
 
-  // Send controller output
+  // Send controller outputg
   output->SetValue(0, 0, tau.x);
   output->SetValue(1, 0, tau.y);
   output->SetValue(2, 0, tau.z);
@@ -384,9 +388,12 @@ Vector3Df surface_att_dot =
   state->SetValue(1, 0, pos_error.y);
   state->SetValue(2, 0, pos_error.z);
   state->SetValue(3, 0, q_error.q0);
-  state->SetValue(4, 0, q_error.q1);
-  state->SetValue(5, 0, q_error.q2);
-  state->SetValue(6, 0, q_error.q3);
+  // state->SetValue(4, 0, q_error.q1);
+  // state->SetValue(5, 0, q_error.q2);
+  // state->SetValue(6, 0, q_error.q3);
+  state->SetValue(4, 0, att_error.x);
+  state->SetValue(5, 0, att_error.y);
+  state->SetValue(6, 0, att_error.z);
   state->SetValue(7, 0, tau.x);
   state->SetValue(8, 0, tau.y);
   state->SetValue(9, 0, tau.z);
