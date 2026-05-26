@@ -195,7 +195,8 @@ void quadsmc::computeMyCtrl(Euler &torques) {
   Vector3Df acc_des;
   // Vector2Df pos_error2D, vel_error2D;
 
-  float yaw_ref = 0;
+  // float yaw_ref = 0;
+  float yaw_ref = (float)desired_yaw->Value();
 
   computeCartesianErrors(pos_error, vel_error, acc_des, yaw_ref);
   // PositionValues(pos_error2D, vel_error2D, yaw_ref);
@@ -356,13 +357,15 @@ void quadsmc::PositionValues(Vector2Df &pos_error, Vector2Df &vel_error,
                                   desired_position->Value().y);
     pos_error = uav_2Dpos - desired_position_xy;
     vel_error = uav_2Dvel;
-    yaw_ref = (float)desired_yaw->Value();
+    // yaw_ref = (float)desired_yaw->Value();
+    yaw_ref = atan2(desired_position_xy.y, desired_position_xy.x);
   } else if (behaviourMode == BehaviourMode_t::Trajectory) {
     myPlanner->Update(GetTime());
     Vector2Df desired_position_xy(myPlanner->Output(0), myPlanner->Output(1));
     Vector2Df desired_velocity_xy(myPlanner->Output(3), myPlanner->Output(4));
     pos_error = uav_2Dpos - desired_position_xy;
     vel_error = uav_2Dvel - desired_velocity_xy;
+
     yaw_ref = 0; // You can also define a desired yaw reference for the
                  // trajectory if needed.
   } else {       // Circle
@@ -422,8 +425,9 @@ void quadsmc::computeCartesianErrors(Vector3Df &pos_error, Vector3Df &vel_error,
 
     xidpp = Vector3Df(myPlanner->Output(6), myPlanner->Output(7),
                       myPlanner->Output(8));
-    desiredYaw = 0.0; // You can also define a desired yaw reference for the
-                      // trajectory if needed.
+
+    desiredYaw = (float)myPlanner->Output(9); 
+                      
   } else {            // Circle
     Vector2Df circle_pos, circle_vel;
     // Vector3Df xid, xidp;
