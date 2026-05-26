@@ -24,7 +24,7 @@ using namespace flair::gui;
 using namespace flair::filter;
 
 MyTrajectory::MyTrajectory(const LayoutPosition *position, const string &name)
-    : ControlLaw(position->getLayout(), name, 9), first_update(true),
+    : ControlLaw(position->getLayout(), name, 10), first_update(true),
       delta_t(0.001F), initial_time(0.0F) {
   // Input matrix
   input = new Matrix(this, 3, 1, floatType, name);
@@ -99,6 +99,7 @@ void MyTrajectory::UpdateFrom(const io_data *data) {
   Vector3Df desired_position;
   Vector3Df desired_velocity;
   Vector3Df desired_acceleration;
+  float desired_heading;
   float ramp = 0.0F;
 
   ramp = std::fmin(current_time / 5.0F, 1.0F);
@@ -125,6 +126,8 @@ void MyTrajectory::UpdateFrom(const io_data *data) {
       (-ramp * amplitude_value *
        std::cos(current_time * xy_rate_value));
   desired_acceleration.z = (0.0F);
+
+  desired_heading = atan2f(desired_position.y - pos_initial.y, desired_position.x -pos_initial.x) - 1.57;
 
   // std::cout << pos_initial.z << "pos_initial.z @ traj\n";
 
@@ -155,6 +158,7 @@ void MyTrajectory::UpdateFrom(const io_data *data) {
   output->SetValue(6, 0, desired_acceleration.x);
   output->SetValue(7, 0, desired_acceleration.y);
   output->SetValue(8, 0, desired_acceleration.z);
+  output->SetValue(9, 0, desired_heading);
   // Send data time for logging
   output->SetDataTime(data->DataTime());
 
