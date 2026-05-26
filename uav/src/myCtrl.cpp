@@ -121,6 +121,7 @@ void MyController::UpdateFrom(const io_data *data) {
     q_desired_prev = Quaternion(1.0F, 0.0F, 0.0F, 0.0F);
     omega_desired_prev = Vector3Df(0.0F, 0.0F, 0.0F);
     float thrust_curr = g;
+
     input->GetMutex();
     pos_error_0 =
         Vector3Df(input->Value(0, 0), input->Value(1, 0), input->Value(2, 0));
@@ -169,34 +170,25 @@ void MyController::UpdateFrom(const io_data *data) {
 
   // Cartesian custom controller self.s_p_t0*np.exp(-self.k_t0*self.t)
   Vector3Df surface_pos = Vector3Df(
-      vel_error.x + (Lambda_pos_val.x * pos_error.x) +
-          (Surface_pos_t0.x * expf(-K_surf_pos_t0_val.x * current_time))*0,
-      vel_error.y + (Lambda_pos_val.y * pos_error.y) +
-          (Surface_pos_t0.y * expf(-K_surf_pos_t0_val.y * current_time))*0,
-      vel_error.z + (Lambda_pos_val.z * pos_error.z) +
-          (Surface_pos_t0.z * expf(-K_surf_pos_t0_val.z * current_time))*0
-        );
+      vel_error.x + (Lambda_pos_val.x * pos_error.x),
+      vel_error.y + (Lambda_pos_val.y * pos_error.y),
+      vel_error.z + (Lambda_pos_val.z * pos_error.z) 
+      );
 
   
   Vector3Df surface_pos_dot =
       Vector3Df(-(mass_val * Lambda_pos_val.x * vel_error.x) -
                     (mass_val * K_pos_val.x * 
-                     tanhf(surface_pos.x)) + acc_desired.x
+                     tanhf(surface_pos.x)) + acc_desired.x,
                     //  -sqrtf(fabsf(surface_pos.x)) * tanhf(surface_pos.x)
-                     + (mass_val * K_surf_pos_t0_val.x * Surface_pos_t0.x *
-                     expf(-K_surf_pos_t0_val.x * current_time))*0,
                 -(mass_val * Lambda_pos_val.y * vel_error.y) -
                     (mass_val * K_pos_val.y * 
-                     tanhf(surface_pos.y)) + acc_desired.y 
+                     tanhf(surface_pos.y)) + acc_desired.y, 
                     //  - sqrtf(fabsf(surface_pos.y)) * tanhf(surface_pos.y)
-                     + (mass_val * K_surf_pos_t0_val.y * Surface_pos_t0.y *
-                     expf(-K_surf_pos_t0_val.y * current_time))*0,
                 -(mass_val * Lambda_pos_val.z * vel_error.z) -
                     (mass_val * K_pos_val.z * 
                      tanhf(surface_pos.z)) - (mass_val*g) + acc_desired.z
                     //  - sqrtf(fabsf(surface_pos.z)) * tanhf(surface_pos.z)
-                     + (mass_val * K_surf_pos_t0_val.z * Surface_pos_t0.z *
-                 expf(-K_surf_pos_t0_val.z * current_time))*0 
       );
 
 
@@ -208,6 +200,7 @@ void MyController::UpdateFrom(const io_data *data) {
   float thrust_norm = sqrtf(DotProduct(surface_pos_dot, surface_pos_dot));
   Vector3Df temp = CrossProduct(Vector3Df(0.0F, 0.0F, -1.0F), surface_pos_dot);
   float temp_norm = sqrtf(DotProduct(temp, temp));
+  
 
   Quaternion thrust_q =
       Quaternion(0.0F, surface_pos_dot.x, surface_pos_dot.y, surface_pos_dot.z);
@@ -216,9 +209,7 @@ void MyController::UpdateFrom(const io_data *data) {
   
     q_desired.Normalize();
     // std::cout << thrust_norm << " thrust norm \n";
-    
 
-    
     
   Quaternion body_z_world =
       q_desired * Quaternion(0.0F, 0.0F, 0.0F, 1.0F) * q_desired.GetConjugate();
@@ -234,80 +225,24 @@ void MyController::UpdateFrom(const io_data *data) {
   float ctrl_z = DotProduct(u_position, Vector3Df(body_z_world.q1, body_z_world.q2, body_z_world.q3));
   u_position.Saturate((float)sat_pos->Value());
   
-  // u_position = Vector3Df(
-  // (fabsf(u_position.x) < control_threshold) ? 0.0F : u_position.x,
-  // (fabsf(u_position.y) < control_threshold) ? 0.0F : u_position.y,
-  // (fabsf(u_position.z) < control_threshold) ? 0.0F : u_position.z
-  // );
 
-
-  
-//   // Computing omega desired from thrust vector
-//   Quaternion u_position_normalized_q = Quaternion(0.0, u_position.x/u_position.GetNorm(), u_position.y/u_position.GetNorm(), u_position.z/u_position.GetNorm());
-//   Quaternion thrust_curr_q = Quaternion(0.0,0.0,0.0,thrust_curr/mass_val);
-//   Quaternion thrust_curr_normalized_q = Quaternion(0.0,0.0,0.0,thrust_curr/thrust_curr_norm);
-//   Quaternion thrust_curr_inertial_q = (quat*thrust_curr_q*quat.GetConjugate());
-//   Vector3Df  v_dot = Vector3Df(thrust_curr_inertial_q.q1, thrust_curr_inertial_q.q2, thrust_curr_inertial_q.q3) + Vector3Df(0.0,0.0,g);
-//   Vector3Df  acc_error = v_dot - acc_desired;
-
-//   std::cout << acc_error.x << ", " << acc_error.y << ", " << acc_error.z << "acc_error \n ";
-
-  
-
-  
-//   Vector3Df F_u_dot = Vector3Df(
-  //     -(Lambda_pos_val.x * acc_error.x) - (K_pos_val.x*(1/coshf(u_position.x))*(1/coshf(u_position.x))),
-  //     -(Lambda_pos_val.y * acc_error.y) - (K_pos_val.y*(1/coshf(u_position.y))*(1/coshf(u_position.y))),
-//     -(Lambda_pos_val.z * acc_error.z) - (K_pos_val.z*(1/coshf(u_position.z))*(1/coshf(u_position.z)))
-//   );
-
-//   Vector3Df  F_u_normalized = u_position/u_position.GetNorm();
-
-//   F_u_normalized = Vector3Df(
-//     (fabsf(F_u_normalized.x) < control_threshold) ? 0.0F : F_u_normalized.x,
-//     (fabsf(F_u_normalized.y) < control_threshold) ? 0.0F : F_u_normalized.y,
-//     (fabsf(F_u_normalized.z) < control_threshold) ? 0.0F : F_u_normalized.z
-//   );
-
-//   // std::cout << "F_u_dot: " << F_u_dot.x << ", " << F_u_dot.y << ", " << F_u_dot.z << "\n";
-
-//   std::cout << "thrust_curr: " << thrust_curr << "\n";
-//   std::cout << "normalized thrust curr" << thrust_curr/thrust_norm << "\n";
-
-//   Quaternion F_u_normalized_q = Quaternion(0.0,F_u_normalized.x, F_u_normalized.y, F_u_normalized.z);
-//   float dot = F_u_normalized.x * F_u_dot.x 
-//             + F_u_normalized.y * F_u_dot.y 
-//             + F_u_normalized.z * F_u_dot.z;
-
-//   Vector3Df F_u_dot_normalized = Vector3Df(
-//       (F_u_dot.x - F_u_normalized.x * dot) / u_position.GetNorm(),
-//       (F_u_dot.y - F_u_normalized.y * dot) / u_position.GetNorm(),
-//       (F_u_dot.z - F_u_normalized.z * dot) / u_position.GetNorm()
-//   );
-//   // Vector3Df F_u_dot_normalized;
-//   // F_u_dot_normalized = (F_u_dot - F_u_normalized * F_u_n_F_u_dot) / u_position.GetNorm();
-
-
-//   std::cout << "F_u_normalized_q: " << F_u_normalized_q.q0 << ", " << F_u_normalized_q.q1 << ", " << F_u_normalized_q.q2 << ", " << F_u_normalized_q.q3 << "\n";
-//   std::cout << "F_u_dot: " << F_u_dot.x << ", " << F_u_dot.y << ", " << F_u_dot.z << "\n";
-// std::cout << "F_u_dot_normalized: " << F_u_dot_normalized.x << ", " << F_u_dot_normalized.y << ", " << F_u_dot_normalized.z << "\n";
-// std::cout << "thrust_curr_normalized_q: " << thrust_curr_normalized_q.q0 << ", " << thrust_curr_normalized_q.q1 << ", " << thrust_curr_normalized_q.q2 << ", " << thrust_curr_normalized_q.q3 << "\n";
-
-//   Quaternion F_u_dot_normalized_q = Quaternion(0.0,F_u_dot_normalized.x, F_u_dot_normalized.y, F_u_dot_normalized.z);
-
-//   Quaternion omega_desired_q = thrust_curr_normalized_q*F_u_normalized_q.GetConjugate()*F_u_dot_normalized_q*thrust_curr_normalized_q.GetConjugate();
-//   Vector3Df  omega_desired = Vector3Df(omega_desired_q.q1,omega_desired_q.q2, omega_desired_q.q3);
-//   std::cout << omega_desired.x << ", " << omega_desired.y << ", " << omega_desired.z << "omega_desired \n ";
-
-
-  // Attitude controller
-  Quaternion q_heading = Quaternion(1.0,0.0,0.0,0.0);
+  Quaternion q_heading = Quaternion(cosf(yaw_ref/2),0.0,0.0,sinf(yaw_ref/2));
+  // Quaternion q_heading = Quaternion(cos(heading_from_thrust/2),0.0,0.0,-sin(heading_from_thrust/2));
   q_desired = q_desired*q_heading;
+
+  float dot = q_desired.q0 * quat.q0
+            + q_desired.q1 * quat.q1
+            + q_desired.q2 * quat.q2
+            + q_desired.q3 * quat.q3;
+
+  if (dot < 0.0F) {
+      q_desired = -q_desired;  
+  }
   
   Quaternion q_error = (q_desired.GetConjugate() * quat);
   q_error.Normalize();
-  // Vector3Df att_error = 2 * Vector3Df(q_error.q1,q_error.q2, q_error.q3);
-  Vector3Df att_error = 2 * q_error.GetLogarithm();
+  Vector3Df att_error = 2 * Vector3Df(q_error.q1,q_error.q2, q_error.q3);
+  // Vector3Df att_error = 2 * q_error.GetLogarithm();
   
   std::cout << pos_error.x << ", " << pos_error.y << ", " << pos_error.z << " p_err \n";
   std::cout << att_error.x << ", " << att_error.y << ", " << att_error.z << " att_err \n";
@@ -350,7 +285,7 @@ Vector3Df surface_att_dot =
   // tau = Vector3Df(0.0,0.0,0.0);
 
 
-  // q_desired_prev = q_desired;
+  q_desired_prev = q_desired;
   // omega_desired_prev = omega_desired;
   
   applyMotorConstant(tau);
