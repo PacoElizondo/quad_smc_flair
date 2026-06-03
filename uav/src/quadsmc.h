@@ -90,7 +90,7 @@ private:
   float thrust;
 
   flair::gui::PushButton *startCircle, *stopCircle, *positionHold;
-  flair::meta::MetaVrpnObject *targetVrpn, *uavVrpn;
+  flair::meta::MetaVrpnObject *uavVrpn;
   flair::filter::TrajectoryGenerator2DCircle *circle;
   flair::core::AhrsData *customReferenceOrientation, *customOrientation;
 

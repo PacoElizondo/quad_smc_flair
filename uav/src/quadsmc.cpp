@@ -30,6 +30,7 @@
 #include <TargetController.h>
 #include <TrajectoryGenerator2DCircle.h>
 #include <Uav.h>
+#include <Vector2D.h>
 #include <Vector3D.h>
 #include <Vector3DSpinBox.h>
 #include <VrpnClient.h>
@@ -55,13 +56,10 @@ quadsmc::quadsmc(TargetController *controller)
 
   if (vrpnclient->ConnectionType() == VrpnClient::Xbee) {
     uavVrpn = new MetaVrpnObject(uav->ObjectName(), (uint8_t)0);
-    targetVrpn = new MetaVrpnObject("target", 1);
   } else if (vrpnclient->ConnectionType() == VrpnClient::Vrpn) {
     uavVrpn = new MetaVrpnObject(uav->ObjectName());
-    targetVrpn = new MetaVrpnObject("target");
   } else if (vrpnclient->ConnectionType() == VrpnClient::VrpnLite) {
     uavVrpn = new MetaVrpnObject(uav->ObjectName());
-    targetVrpn = new MetaVrpnObject("target");
   }
 
   // set vrpn as failsafe altitude sensor for mamboedu as us in not working well
@@ -71,7 +69,6 @@ quadsmc::quadsmc(TargetController *controller)
   }
 
   getFrameworkManager()->AddDeviceToLog(uavVrpn);
-  getFrameworkManager()->AddDeviceToLog(targetVrpn);
   vrpnclient->Start();
 
   uav->GetAhrs()->YawPlot()->AddCurve(uavVrpn->State()->Element(2),
@@ -333,8 +330,7 @@ AhrsData *quadsmc::GetReferenceOrientation(void) {
   return customReferenceOrientation;
 }
 
-void quadsmc::PositionValues(Vector2Df &pos_error, Vector2Df &vel_error,
-                             float &yaw_ref) {
+void quadsmc::PositionValues(Vector2Df &pos_error, Vector2Df &vel_error, float &yaw_ref) {
   Vector3Df uav_pos, uav_vel;     // in VRPN coordinate system
   Vector2Df uav_2Dpos, uav_2Dvel; // in VRPN coordinate system
 
@@ -361,6 +357,7 @@ void quadsmc::PositionValues(Vector2Df &pos_error, Vector2Df &vel_error,
     yaw_ref = atan2(desired_position_xy.y, desired_position_xy.x);
   } else if (behaviourMode == BehaviourMode_t::Trajectory) {
     myPlanner->Update(GetTime());
+    
     Vector2Df desired_position_xy(myPlanner->Output(0), myPlanner->Output(1));
     Vector2Df desired_velocity_xy(myPlanner->Output(3), myPlanner->Output(4));
     pos_error = uav_2Dpos - desired_position_xy;
@@ -369,13 +366,9 @@ void quadsmc::PositionValues(Vector2Df &pos_error, Vector2Df &vel_error,
     yaw_ref = 0; // You can also define a desired yaw reference for the
                  // trajectory if needed.
   } else {       // Circle
-    Vector3Df target_pos;
     Vector2Df circle_pos, circle_vel;
-    Vector2Df target_2Dpos;
 
-    targetVrpn->GetPosition(target_pos);
-    target_pos.To2Dxy(target_2Dpos);
-    circle->SetCenter(target_2Dpos);
+    circle->SetCenter(Vector2Df(0.0,0.0));
 
     // circle reference
     circle->Update(GetTime());
@@ -385,7 +378,7 @@ void quadsmc::PositionValues(Vector2Df &pos_error, Vector2Df &vel_error,
     // error in optitrack frame
     pos_error = uav_2Dpos - circle_pos;
     vel_error = uav_2Dvel - circle_vel;
-    yaw_ref = atan2(target_pos.y - uav_pos.y, target_pos.x - uav_pos.x);
+    yaw_ref = atan2( - uav_pos.y, - uav_pos.x);
   }
 
   // error in uav frame
@@ -403,7 +396,6 @@ void quadsmc::computeCartesianErrors(Vector3Df &pos_error, Vector3Df &vel_error,
 
   uavVrpn->GetPosition(uav_pos);
   uavVrpn->GetSpeed(uav_vel);
-  targetVrpn->GetPosition(charge_pos);
 
   if (behaviourMode == BehaviourMode_t::Regulation) {
     xid = Vector3Df(desired_position->Value().x, desired_position->Value().y,
@@ -445,7 +437,7 @@ void quadsmc::computeCartesianErrors(Vector3Df &pos_error, Vector3Df &vel_error,
     pos_error = uav_pos - xid;
     vel_error = uav_vel - xidp;
 
-    // desiredYaw = atan2(0 - uav_pos.y, 0 - uav_pos.x); //yaw pointing to the
+    desiredYaw = atan2( - uav_pos.y, - uav_pos.x); //yaw pointing to the
     // center of the circle
   }
   // std::cout << "Desired position: " <<  xid.x << ", " << xid.y << ", " <<
@@ -473,12 +465,7 @@ void quadsmc::SignalEvent(Event_t event) {
 void quadsmc::ExtraSecurityCheck(void) {
   if ((!vrpnLost) && ((behaviourMode == BehaviourMode_t::Circle) ||
                       (behaviourMode == BehaviourMode_t::PositionHold))) {
-    if (!targetVrpn->IsTracked(500)) {
-      Thread::Err("VRPN, target lost\n");
-      vrpnLost = true;
-      EnterFailSafeMode();
-      Land();
-    }
+
     if (!uavVrpn->IsTracked(500)) {
       Thread::Err("VRPN, uav lost\n");
       vrpnLost = true;
@@ -565,9 +552,8 @@ void quadsmc::Start_task(void) {
     Vector3Df uav_pos, target_pos;
     Vector2Df uav_2Dpos, target_2Dpos;
 
-    targetVrpn->GetPosition(target_pos);
     target_pos.To2Dxy(target_2Dpos);
-    circle->SetCenter(target_2Dpos);
+    circle->SetCenter(0.0);
 
     uavVrpn->GetPosition(uav_pos);
     uav_pos.To2Dxy(uav_2Dpos);
