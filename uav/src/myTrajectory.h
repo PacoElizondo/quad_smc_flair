@@ -32,16 +32,19 @@ public:
                const std::string &name);
   ~MyTrajectory();
   void UpdateFrom(const flair::core::io_data *data);
+  // void Update(flair::core::Time time);
   void Reset(void);
   void SetValues(const flair::core::Vector3Df &Pos_0);
+  double initial_time;
 
 private:
-  float delta_t, initial_time;
+  float delta_t;
   float current_time;
   bool first_update;
   flair::core::Vector3Df pos_initial;
   flair::core::Matrix *state;
   flair::gui::DoubleSpinBox *deltaT_custom, *amplitude, *z_rate, *xy_rate;
+  
 
   void plotCartesianErrors(const flair::gui::LayoutPosition *position);
 };

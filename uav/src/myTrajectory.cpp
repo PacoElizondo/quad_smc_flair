@@ -15,6 +15,7 @@
 #include <Vector3DSpinBox.h>
 #include <algorithm>
 #include <cmath>
+#include <io_data.h>
 #include <iostream>
 #include <regex>
 
@@ -52,8 +53,8 @@ MyTrajectory::MyTrajectory(const LayoutPosition *position, const string &name)
                                 "Amplitude", 0, 10, 0.01, 4, 1.0);
   z_rate = new DoubleSpinBox(general_parameters->NewRow(), "Z rate", -0.05, 0.05,
                              0.001, 4, 0.0);
-  xy_rate = new DoubleSpinBox(general_parameters->NewRow(), "XY rate", -2, 2,
-                              0.001, 4, 0.0);
+  xy_rate = new DoubleSpinBox(general_parameters->NewRow(), "XY rate", -1, 1,
+                              0.01, 2, 1.0);
 
   // Show cartesian errors plot
   plotCartesianErrors(gui_quadsmc->NewRow());
@@ -65,37 +66,53 @@ MyTrajectory::~MyTrajectory() { delete state; }
 
 void MyTrajectory::UpdateFrom(const io_data *data) {
   if (first_update) {
+    
+    
 
-    initial_time = float(GetTime()) / 1000000000.0F;
+
+    // initial_time = 0.0F;
+    pos_initial =
+    Vector3Df(input->Value(0, 0), input->Value(1, 0), input->Value(2, 0));
 
     first_update = false;
   }
 
+  // current_time =(float) data->DataTime() / 1e+18F;
+  
+  
   bool calibration = false;
-  // float current_time = (float(GetTime()) / 1000000000.0F);
-
+  double double_time = GetTime() / 1e9 - initial_time ;
+  float current_time = float(double_time);
+  
   auto amplitude_value = (float)amplitude->Value();
   auto z_rate_value = (float)z_rate->Value();
   auto xy_rate_value = (float)xy_rate->Value();
+  
+  // if (deltaT_custom->Value() == 0) {
+  // long long long_delta = data->DataDeltaTime() / 1e9;
+  // delta_t = float(long_delta); 
+    // delta_t = (float)(data->DataDeltaTime()& 0xFFFF );
+  // } else {
+    //   delta_t = (float)deltaT_custom->Value();
+  // }
+  // delta_t = (float)deltaT_custom->Value();
+  
+  // current_time = current_time + delta_t;
+  // std::cout << current_time << "time at myTrajectory \n";
+  // std::cout << current_time << "\n";
+  // if (current_time < 0.1 && !calibration){
+  //   input->GetMutex();
+    // pos_initial =
+    // Vector3Df(input->Value(0, 0), input->Value(1, 0), input->Value(2, 0));
+  //   input->ReleaseMutex();
+    
+  //   // std::cout << current_time << "current_time @ myTraj \n";
+  // } else { calibration = true;  }
 
-  if (deltaT_custom->Value() == 0) {
-    delta_t = (float)(data->DataDeltaTime()) / 1000000000.0F;
-  } else {
-    delta_t = (float)deltaT_custom->Value();
-  }
+  
+
 
   // current_time = current_time + delta_t;
-  // std::cout << current_time << "\n";
-  if (current_time < 0.1 && !calibration){
-    input->GetMutex();
-    pos_initial =
-    Vector3Df(input->Value(0, 0), input->Value(1, 0), input->Value(2, 0));
-    input->ReleaseMutex();
-    
-    // std::cout << current_time << "current_time @ myTraj \n";
-  } else { calibration = true;  }
-
-  current_time = current_time + delta_t;
   Vector3Df desired_position;
   Vector3Df desired_velocity;
   Vector3Df desired_acceleration;
@@ -106,12 +123,11 @@ void MyTrajectory::UpdateFrom(const io_data *data) {
   // std::cout << ramp << "ramp \n";
 
   desired_position.x =
-      (ramp * amplitude_value * (std::sin(current_time * xy_rate_value))/xy_rate_value)+ pos_initial.x;
+      (ramp * amplitude_value * (std::sin(current_time * xy_rate_value)))+ pos_initial.x;
   desired_position.y =
-      (ramp * amplitude_value * (std::cos(current_time * xy_rate_value))/xy_rate_value) + pos_initial.y;
+      (ramp * amplitude_value * (std::cos(current_time * xy_rate_value))) + pos_initial.y;
   desired_position.z = (current_time * z_rate_value) - 1.5F;
-  // std::cout << current_time;
-  // std::cout << desired_position.x << "desired p x @ traj \n";
+  
 
   desired_velocity.x = (ramp * amplitude_value  *  
                         std::cos(current_time * xy_rate_value));
@@ -129,22 +145,6 @@ void MyTrajectory::UpdateFrom(const io_data *data) {
 
   desired_heading = atan2f(desired_position.y - pos_initial.y, desired_position.x -pos_initial.x) - 1.57;
 
-  // std::cout << pos_initial.z << "pos_initial.z @ traj\n";
-
-
-  // desired_position.x = pos_initial.x;
-  // desired_position.y = pos_initial.y;
-  // desired_position.z = 0;
-
-  // // std::cout << pos_initial.y << " posinitialy";
-
-  // desired_velocity.x = 0.0F;
-  // desired_velocity.y = 0.0F;
-  // desired_velocity.z = 0.0F;
-
-  // desired_acceleration.x = 0.0F;
-  // desired_acceleration.y = 0.0F;
-  // desired_acceleration.z = 0.0F;
 
   // Send desired position
   output->SetValue(0, 0, desired_position.x);
@@ -180,7 +180,7 @@ void MyTrajectory::UpdateFrom(const io_data *data) {
   ProcessUpdate(output);
 }
 
-void MyTrajectory::Reset(void) { first_update = true; }
+void MyTrajectory::Reset(void) { first_update = true; initial_time = GetTime() / 1e9; }
 
 void MyTrajectory::SetValues(const Vector3Df &Pos_0) {
   // Set the input values for the path planner. Now it only receives a misc
@@ -203,3 +203,8 @@ void MyTrajectory::plotCartesianErrors(const LayoutPosition *position) {
   plot->AddCurve(output->Element(1), DataPlot::Black); // desired y
   plot->AddCurve(output->Element(2), DataPlot::Blue);  // desired z
 }
+
+// void MyTrajectory::Update(Time time){
+  
+  
+// }
