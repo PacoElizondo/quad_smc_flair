@@ -126,11 +126,11 @@ quadsmc::quadsmc(TargetController *controller)
   // Custom control law
   Tab *setup_custom_controller =
       new Tab(getFrameworkManager()->GetTabWidget(), "Custom controller");
-  myCtrl = new MyController(setup_custom_controller->At(0, 0), "Parameters");
+  myCtrl = new MyController(setup_custom_controller->At(0, 0), "Controller");
 
   Tab *setup_path_planner =
       new Tab(getFrameworkManager()->GetTabWidget(), "Path planner");
-  myPlanner = new MyTrajectory(setup_path_planner->At(0, 0), "Parameters");
+  myPlanner = new MyTrajectory(setup_path_planner->At(0, 0), "Planner");
 
   customReferenceOrientation = new AhrsData(this, "reference");
   uav->GetAhrs()->AddPlot(customReferenceOrientation, DataPlot::Yellow);
@@ -138,6 +138,7 @@ quadsmc::quadsmc(TargetController *controller)
   AddDeviceToControlLawLog(uX);
   AddDeviceToControlLawLog(uY);
   AddDeviceToControlLawLog(myCtrl);
+  AddDeviceToControlLawLog(myPlanner);
 
   customOrientation = new AhrsData(this, "orientation");
 }
