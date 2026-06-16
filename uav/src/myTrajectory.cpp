@@ -44,17 +44,33 @@ MyTrajectory::MyTrajectory(const LayoutPosition *position, const string &name)
   state = new Matrix(this, log_labels, floatType, name);
   delete log_labels;
 
+    
+  
   // GUI for path planning
   auto *gui_quadsmc = new GroupBox(position, name);
   auto *general_parameters = new GroupBox(gui_quadsmc->NewRow(), " ");
   deltaT_custom = new DoubleSpinBox(general_parameters->NewRow(),
-                                    "Custom dt [s]", 0, 0.01, 0.001, 4, 0.001);
+                                    "delta_t", 0, 0.01, 0.001, 4, 1.0);
   amplitude = new DoubleSpinBox(general_parameters->LastRowLastCol(),
                                 "Amplitude", 0, 10, 0.01, 4, 1.0);
-  z_rate = new DoubleSpinBox(general_parameters->NewRow(), "Z rate", -0.05, 0.05,
-                             0.001, 4, 0.0);
-  xy_rate = new DoubleSpinBox(general_parameters->NewRow(), "XY rate", -1, 1,
-                              0.01, 2, 1.0);
+  height = new DoubleSpinBox(general_parameters->NewRow(), "Height", -2, -0.1,
+                             0.001, 4, -1.5);
+  speed = new DoubleSpinBox(general_parameters->LastRowLastCol(), "Speed", 0, 3,
+                             0.001, 4, 1);
+
+  GroupBox *traj_selection_box =
+    new GroupBox(general_parameters->NewRow(), "Custom trajectory");
+  traj_selection = new ComboBox(traj_selection_box->NewRow(), "Custom trajectory");
+  traj_selection->AddItem("Straight line");
+  traj_selection->AddItem("Circle");
+  // traj_selection->AddItem("Circle tracking");
+  // traj_selection->AddItem("Trajectory tracking");
+  // ADD trajectory options spinbox
+  traj_map_ = {
+        {0, [this](const TrajectoryContext& ctx) { return ComputeStraightLine(ctx); }},
+        {1, [this](const TrajectoryContext& ctx) { return ComputeCircle(ctx); }},
+  };
+
 
   // Show cartesian errors plot
   plotCartesianErrors(gui_quadsmc->NewRow());
@@ -67,52 +83,25 @@ MyTrajectory::~MyTrajectory() { delete state; }
 void MyTrajectory::UpdateFrom(const io_data *data) {
   if (first_update) {
     
-    
-
-
     // initial_time = 0.0F;
     pos_initial =
     Vector3Df(input->Value(0, 0), input->Value(1, 0), input->Value(2, 0));
-
+    
     first_update = false;
   }
 
-  // current_time =(float) data->DataTime() / 1e+18F;
-  
-  
   bool calibration = false;
   double double_time = GetTime() / 1e9 - initial_time ;
   float current_time = float(double_time);
+
   
   auto amplitude_value = (float)amplitude->Value();
-  auto z_rate_value = (float)z_rate->Value();
-  auto xy_rate_value = (float)xy_rate->Value();
+  auto height_value = (float)height->Value();
+  auto speed_value = (float)speed->Value();
   
-  // if (deltaT_custom->Value() == 0) {
-  // long long long_delta = data->DataDeltaTime() / 1e9;
-  // delta_t = float(long_delta); 
-    // delta_t = (float)(data->DataDeltaTime()& 0xFFFF );
-  // } else {
-    //   delta_t = (float)deltaT_custom->Value();
-  // }
-  // delta_t = (float)deltaT_custom->Value();
-  
-  // current_time = current_time + delta_t;
-  // std::cout << current_time << "time at myTrajectory \n";
-  // std::cout << current_time << "\n";
-  // if (current_time < 0.1 && !calibration){
-  //   input->GetMutex();
-    // pos_initial =
-    // Vector3Df(input->Value(0, 0), input->Value(1, 0), input->Value(2, 0));
-  //   input->ReleaseMutex();
-    
-  //   // std::cout << current_time << "current_time @ myTraj \n";
-  // } else { calibration = true;  }
+  double double_delta = data->DataDeltaTime() / 1e9;
+  float dt = float(double_delta);
 
-  
-
-
-  // current_time = current_time + delta_t;
   Vector3Df desired_position;
   Vector3Df desired_velocity;
   Vector3Df desired_acceleration;
@@ -120,67 +109,112 @@ void MyTrajectory::UpdateFrom(const io_data *data) {
   float ramp = 0.0F;
 
   ramp = std::fmin(current_time / 5.0F, 1.0F);
-  // std::cout << ramp << "ramp \n";
-
-  desired_position.x =
-      (ramp * amplitude_value * (std::sin(current_time * xy_rate_value)))+ pos_initial.x;
-  desired_position.y =
-      (ramp * amplitude_value * (std::cos(current_time * xy_rate_value))) + pos_initial.y;
-  desired_position.z = (current_time * z_rate_value) - 1.5F;
+  float m = std::fmin(current_time * speed_value, amplitude_value);
+  float m_delta = (m - m_prev) / dt;
   
 
-  desired_velocity.x = (ramp * amplitude_value  *  
-                        std::cos(current_time * xy_rate_value));
-  desired_velocity.y = (-ramp * amplitude_value *  
-                        std::sin(current_time * xy_rate_value));
-  desired_velocity.z = (z_rate_value);
 
-  desired_acceleration.x =
-      (-ramp * amplitude_value *
-       std::sin(current_time * xy_rate_value));
-  desired_acceleration.y =
-      (-ramp * amplitude_value *
-       std::cos(current_time * xy_rate_value));
-  desired_acceleration.z = (0.0F);
+  m_prev = m;
 
-  desired_heading = atan2f(desired_position.y - pos_initial.y, desired_position.x -pos_initial.x) - 1.57;
+  TrajectoryContext ctx;
+  ctx.current_time = current_time;
+  ctx.amplitude    = amplitude_value;
+  ctx.speed        = speed_value;
+  ctx.height       = height_value;
+  ctx.ramp         = ramp;
+  ctx.pos_initial  = pos_initial;
 
+  auto it = traj_map_.find(traj_selection->CurrentIndex());
+  if (it == traj_map_.end()) return;
 
+  TrajectoryOutput desired = it->second(ctx);
+
+       
   // Send desired position
-  output->SetValue(0, 0, desired_position.x);
-  output->SetValue(1, 0, desired_position.y);
-  output->SetValue(2, 0, desired_position.z);
+  output->SetValue(0, 0, desired.position.x);
+  output->SetValue(1, 0, desired.position.y);
+  output->SetValue(2, 0, desired.position.z);
   // Send desired velocity
-  output->SetValue(3, 0, desired_velocity.x);
-  output->SetValue(4, 0, desired_velocity.y);
-  output->SetValue(5, 0, desired_velocity.z);
+  output->SetValue(3, 0, desired.velocity.x);
+  output->SetValue(4, 0, desired.velocity.y);
+  output->SetValue(5, 0, desired.velocity.z);
   // Send desired acceleration
-  output->SetValue(6, 0, desired_acceleration.x);
-  output->SetValue(7, 0, desired_acceleration.y);
-  output->SetValue(8, 0, desired_acceleration.z);
-  output->SetValue(9, 0, desired_heading);
+  output->SetValue(6, 0, desired.acceleration.x);
+  output->SetValue(7, 0, desired.acceleration.y);
+  output->SetValue(8, 0, desired.acceleration.z);
+  output->SetValue(9, 0, desired.heading);
   // Send data time for logging
   output->SetDataTime(data->DataTime());
 
   // Log state (duplicated from the 0-3 outputs).
-  // state->GetMutex();
-  // state->SetValue(0, 0, desired_position.x);
-  // state->SetValue(1, 0, desired_position.y);
-  // state->SetValue(2, 0, desired_position.z);
+  state->GetMutex();
+  state->SetValue(0, 0, desired.position.x);
+  state->SetValue(1, 0, desired.position.y);
+  state->SetValue(2, 0, desired.position.z);
 
-  // state->SetValue(3, 0, desired_velocity.x);
-  // state->SetValue(4, 0, desired_velocity.y);
-  // state->SetValue(5, 0, desired_velocity.z);
-  // // Send desired acceleration
-  // state->SetValue(6, 0, desired_acceleration.x);
-  // state->SetValue(7, 0, desired_acceleration.y);
-  // state->SetValue(8, 0, desired_acceleration.z);
-  // state->ReleaseMutex();
+  state->SetValue(3, 0, desired.velocity.x);
+  state->SetValue(4, 0, desired.velocity.y);
+  state->SetValue(5, 0, desired.velocity.z);
+  // Send desired acceleration
+  state->SetValue(6, 0, desired.acceleration.x);
+  state->SetValue(7, 0, desired.acceleration.y);
+  state->SetValue(8, 0, desired.acceleration.z);
+  state->ReleaseMutex();
 
   ProcessUpdate(output);
 }
 
-void MyTrajectory::Reset(void) { first_update = true; initial_time = GetTime() / 1e9; }
+
+MyTrajectory::TrajectoryOutput MyTrajectory::ComputeStraightLine(const TrajectoryContext& ctx) {
+    TrajectoryOutput out;
+    float t = ctx.current_time;
+    float a = ctx.amplitude;
+    float ch = coshf(t - 3.0F);
+    float th = tanhf(t - 3.0F);
+
+    out.position.x = a * (th + 1.0F);
+    out.position.y = 0;
+    out.position.z = a * (th - 1.0F) - 0.1F;
+
+    out.velocity.x = a / (ch * ch);
+    out.velocity.y = 0;
+    out.velocity.z = out.velocity.x;
+
+    out.acceleration.x = (-2.0F * a * th) / (ch * ch);
+    out.acceleration.y = 0;
+    out.acceleration.z = out.acceleration.x;
+
+    out.heading = 0.0F;
+    return out;
+}
+
+MyTrajectory::TrajectoryOutput MyTrajectory::ComputeCircle(const TrajectoryContext& ctx) {
+    TrajectoryOutput out;
+    float t = ctx.current_time;
+    float a = ctx.amplitude;
+    float s = ctx.speed;
+    float r = ctx.ramp;
+
+    out.position.x = (r * a * std::sin(t * s)) + ctx.pos_initial.x;
+    out.position.y = (r * a * std::cos(t * s)) + ctx.pos_initial.y;
+    out.position.z = std::fmin(ctx.height, -0.1F);
+
+    out.velocity.x =  r * a * std::cos(t * s);
+    out.velocity.y = -r * a * std::sin(t * s);
+    out.velocity.z = 0.0F;
+
+    out.acceleration.x = -r * a * std::sin(t * s);
+    out.acceleration.y = -r * a * std::cos(t * s);
+    out.acceleration.z = 0.0F;
+
+    out.heading = atan2f(out.position.y - ctx.pos_initial.y,
+                         out.position.x - ctx.pos_initial.x) - 1.57F;
+    return out;
+}
+
+
+
+void MyTrajectory::Reset(void) { first_update = true; initial_time = GetTime() / 1e9; m_prev = 0; }
 
 void MyTrajectory::SetValues(const Vector3Df &Pos_0) {
   // Set the input values for the path planner. Now it only receives a misc
