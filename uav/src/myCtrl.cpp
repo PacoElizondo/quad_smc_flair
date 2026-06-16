@@ -13,6 +13,7 @@
 #include <Pid.h>
 #include <Quaternion.h>
 #include <TabWidget.h>
+#include <Tab.h>
 #include <Vector3D.h>
 #include <Vector3DSpinBox.h>
 #include <cmath>
@@ -54,15 +55,15 @@ MyController::MyController(const LayoutPosition *position, const string &name)
   deltaT_custom = new DoubleSpinBox(general_parameters->NewRow(),
                                     "Custom dt [s]", 0, 1, 0.001, 4);
   mass = new DoubleSpinBox(general_parameters->LastRowLastCol(), "Mass [kg]", 0,
-                           10, 0.01, 4, 1.2);
+                           10, 0.001, 4, 0.429);
   k_motor = new DoubleSpinBox(general_parameters->LastRowLastCol(),
-                              "Motor constant", 0, 50, 0.01, 4, 29.5870);
+                              "Motor constant", 0, 50, 0.01, 4, 11.6);
   sat_thrust = new DoubleSpinBox(general_parameters->NewRow(),
-                                 "Saturation thrust", 0, 10, 0.01, 3);
+                                 "Saturation thrust", 0, 10, 0.01, 3, 1.0);
   sat_pos = new DoubleSpinBox(general_parameters->LastRowLastCol(),
-                              "Saturation pos", 0, 10, 0.01, 3);
+                              "Saturation pos", 0, 10, 0.01, 3, 0.8);
   sat_att = new DoubleSpinBox(general_parameters->LastRowLastCol(),
-                              "Saturation att", 0, 10, 0.01, 3);
+                              "Saturation att", 0, 10, 0.01, 3, 0.8);
 
   // Custom cartesian position controller
   auto *custom_position =
@@ -86,9 +87,11 @@ MyController::MyController(const LayoutPosition *position, const string &name)
       new Vector3DSpinBox(custom_attitude->LastRowLastCol(), "Lambda_att", 0,
                           100, 0.1, 3, Vector3Df(10.0F, 10.0F, 10.0F));
 
+  
   // Show cartesian errors plot
   plotCartesianErrors(gui_quadsmc->NewRow());
-  plotQuaternionErrors(gui_quadsmc->NewRow());
+  
+  // plotQuaternionErrors(gui_quadsmc->NewRow());
   
   AddDataToLog(state);
 }
@@ -96,22 +99,13 @@ MyController::MyController(const LayoutPosition *position, const string &name)
 MyController::~MyController() { delete state; }
 
 void MyController::UpdateFrom(const io_data *data) {
-  // float current_time = (float(GetTime()) / 1000000000.0F) - initial_time;
-  // std::cout << current_time << "\n";
   current_time = current_time + delta_t;
   Vector3Df u_position;
   Vector3Df tau;
   
   auto mass_val = (float)mass->Value();
-  const float gravity = 9.81;
-  // const Vector3Df J_diag = Vector3Df(0.000002098,  0.000002102, 0.000004068);
-  
+  const float gravity = 9.81;  
   const Vector3Df J_diag = Vector3Df(0.00209,  0.002102, 0.00406);
-  // if (deltaT_custom->Value() == 0) {
-  //   delta_t = (float)(data->DataDeltaTime()) / 1000000000.0F;
-  // } else {
-  //   delta_t = (float)deltaT_custom->Value();
-  // }
 
   if (first_update) {
     
@@ -148,15 +142,6 @@ void MyController::UpdateFrom(const io_data *data) {
   float yaw_ref = input->Value(0, 5);
   input->ReleaseMutex();
 
-//   pos_error.x = 0.0F;
-//   pos_error.y = 0.0F;
-//   pos_error.z = 0.0F;
-
-  // std::cout << pos_error.x << ", " << pos_error.y << ", " << pos_error.z
-            // << " pos_error @ myCtrl from input \n";
-
-
-
   // Get tunning parameters from GUI
   Vector3Df K_pos_val(K_pos->Value().x, K_pos->Value().y, K_pos->Value().z);
   Vector3Df Lambda_pos_val(Lambda_pos->Value().x, Lambda_pos->Value().y,
@@ -174,7 +159,6 @@ void MyController::UpdateFrom(const io_data *data) {
       vel_error.y + (Lambda_pos_val.y * pos_error.y),
       vel_error.z + (Lambda_pos_val.z * pos_error.z) 
       );
-
   
   Vector3Df surface_pos_dot =
       Vector3Df(-(mass_val * Lambda_pos_val.x * vel_error.x) -
@@ -191,12 +175,6 @@ void MyController::UpdateFrom(const io_data *data) {
                     //  - sqrtf(fabsf(surface_pos.z)) * tanhf(surface_pos.z)
       );
 
-
-
-
-  // std::cout << surface_pos_dot.x << ", " << surface_pos_dot.y << ", " << surface_pos_dot.z
-            // << "s_p_dot" << "\n";
-
   float thrust_norm = sqrtf(DotProduct(surface_pos_dot, surface_pos_dot));
   Vector3Df temp = CrossProduct(Vector3Df(0.0F, 0.0F, -1.0F), surface_pos_dot);
   float temp_norm = sqrtf(DotProduct(temp, temp));
@@ -205,11 +183,7 @@ void MyController::UpdateFrom(const io_data *data) {
   Quaternion thrust_q =
       Quaternion(0.0F, surface_pos_dot.x, surface_pos_dot.y, surface_pos_dot.z);
   q_desired = Quaternion(-thrust_q.q3 + thrust_norm, temp.x, temp.y, temp.z);
-    
-  
-    q_desired.Normalize();
-    // std::cout << thrust_norm << " thrust norm \n";
-
+  q_desired.Normalize();
     
   Quaternion body_z_world =
       q_desired * Quaternion(0.0F, 0.0F, 0.0F, 1.0F) * q_desired.GetConjugate();
@@ -218,23 +192,18 @@ void MyController::UpdateFrom(const io_data *data) {
   u_position.y = surface_pos_dot.y;
   u_position.z = surface_pos_dot.z;
   
-
-  // float control_threshold = 1e-3;
-
-  
   float ctrl_z = DotProduct(u_position, Vector3Df(body_z_world.q1, body_z_world.q2, body_z_world.q3));
   u_position.Saturate((float)sat_pos->Value());
   
 
   Quaternion q_heading = Quaternion(cosf(yaw_ref/2),0.0,0.0,sinf(yaw_ref/2));
-  // Quaternion q_heading = Quaternion(cos(heading_from_thrust/2),0.0,0.0,-sin(heading_from_thrust/2));
   q_desired = q_desired*q_heading;
 
+  // Check for shortest rotation ( see quaternion double cover )
   float dot = q_desired.q0 * quat.q0
             + q_desired.q1 * quat.q1
             + q_desired.q2 * quat.q2
             + q_desired.q3 * quat.q3;
-
   if (dot < 0.0F) {
       q_desired = -q_desired;  
   }
@@ -242,25 +211,12 @@ void MyController::UpdateFrom(const io_data *data) {
   Quaternion q_error = (q_desired.GetConjugate() * quat);
   q_error.Normalize();
   Vector3Df att_error = 2 * Vector3Df(q_error.q1,q_error.q2, q_error.q3);
-  // Vector3Df att_error = 2 * q_error.GetLogarithm();
-  
-  std::cout << pos_error.x << ", " << pos_error.y << ", " << pos_error.z << " p_err \n";
-  std::cout << att_error.x << ", " << att_error.y << ", " << att_error.z << " att_err \n";
-  std::cout << q_error.q0 << ", " << q_error.q1 << ", " << q_error.q2 << ", " << q_error.q3 << " q_err \n";
-
-  // std::cout << att_error.x << att_error.y << att_error.z << "att_error y \n";
-      
-
   
   Quaternion q_desired_dot;
-  
-  // Vector3Df omega_desired =
-  //     Vector3Df(omega_desired_q.q1, omega_desired_q.q2, omega_desired_q.q3);
+
+  // omega desired is compensated by the controller
   omega_desired = Vector3Df(0.0,0.0,0.0);
   Vector3Df omega_error = omega - omega_desired;
-
-  // Vector3Df omega_error = Vector3Df(0.0,0.0,0.0);
-  // Vector3Df omega_desired_dot = (omega_desired - omega_desired_prev) / delta_t;
 
   Vector3Df surface_att = omega_error + Lambda_att_val * att_error;
 
@@ -268,48 +224,32 @@ void MyController::UpdateFrom(const io_data *data) {
                                  -K_att_val.y * tanhf(surface_att.y),
                                  -K_att_val.z * tanhf(surface_att.z));
 
-  // Vector3Df surface_att_dot =
-  // CrossProduct(omega, (J_diag * omega)) +
-  // J_diag * (-Lambda_att_val * omega_error + u_att_sw);
 Vector3Df surface_att_dot =
   CrossProduct(omega, (J_diag * omega)) +
   (- u_att_sw);
   
-  
-
   tau =Vector3Df( surface_att_dot.x, surface_att_dot.y,surface_att_dot.z) ;
-  
-  // std::cout << tau.x << ", " << tau.y << ", " << tau.z << "torques \n" ;
-  // std::cout << omega_desired.x << omega_desired.y << omega_desired.z << "omega d \n";
-
-  // tau = Vector3Df(0.0,0.0,0.0);
-
 
   q_desired_prev = q_desired;
-  // omega_desired_prev = omega_desired;
   
   applyMotorConstant(tau);
   tau.Saturate((float)sat_att->Value());
   
+  // Compute custom thrust
+  thrust = ctrl_z ; // This is the thrust needed to counteract gravity and control the z position
+  thrust_curr = thrust; //store in global variable
 
-    // Compute custom thrust
-    // float comp_mg = -(float)mass->Value()*g; // This is the thrust needed to counteract gravity. Based on the default PID, it should be -0.397918 in Fl-Air simulator.  
-    thrust = ctrl_z ; // This is the thrust needed to counteract gravity and control the z position
-    thrust_curr = thrust; //store in global variable
+  applyMotorConstant(thrust);
+  if(thrust < -sat_thrust->Value())
+  {
+      thrust = -(float)sat_thrust->Value();
+  }
+  else if(thrust >= 0)
+  {
+      thrust = 0; 
+  }
 
-    // std::cout << thrust << "thrust \n";
-    applyMotorConstant(thrust);
-    if(thrust < -sat_thrust->Value())
-    {
-        thrust = -(float)sat_thrust->Value();
-    }
-    else if(thrust >= 0)
-    {
-        thrust = 0; 
-    }
-  
-
-  // Send controller outputg
+  // Send controller output
   output->SetValue(0, 0, tau.x);
   output->SetValue(1, 0, tau.y);
   output->SetValue(2, 0, tau.z);
@@ -376,27 +316,20 @@ void MyController::SetValues(const Vector3Df &pos_error,
 }
 
 void MyController::plotCartesianErrors(const LayoutPosition *position) {
-  // Example of how to plot the position errors in the GUI.
-  // Any variable that is defined in the state matrix can be plotted. Just
-  // remember to set its value in the UpdateFrom function and to add it to the
-  // log_labels matrix in the constructor.
-  auto *plot = new DataPlot1D(position, "Cartesian errors", -1, 1);
-  plot->AddCurve(state->Element(0), DataPlot::Red);   // x error
-  plot->AddCurve(state->Element(1), DataPlot::Black); // y error
-  plot->AddCurve(state->Element(2), DataPlot::Blue);  // z error
+
+  auto *cartesian_tab = new TabWidget(position, "Errors");
+  auto graphLawTab = new Tab(cartesian_tab, "plot error");
+  auto *plot_cartesian_error = new DataPlot1D(graphLawTab->LastRowLastCol(), "Cartesian errors", -1, 1);
+  plot_cartesian_error->AddCurve(state->Element(0), DataPlot::Red);   // x error
+  plot_cartesian_error->AddCurve(state->Element(1), DataPlot::Black); // y error
+  plot_cartesian_error->AddCurve(state->Element(2), DataPlot::Blue);  // z error
+  auto *plot_attitude_error = new DataPlot1D(graphLawTab->LastRowLastCol(), "Quaternion errors", -1, 1);
+  plot_attitude_error->AddCurve(state->Element(4), DataPlot::Red);   
+  plot_attitude_error->AddCurve(state->Element(5), DataPlot::Black); 
+  plot_attitude_error->AddCurve(state->Element(6), DataPlot::Blue);  
+
 }
 
-void MyController::plotQuaternionErrors(const LayoutPosition *position) {
-  // Example of how to plot the position errors in the GUI.
-  // Any variable that is defined in the state matrix can be plotted. Just
-  // remember to set its value in the UpdateFrom function and to add it to the
-  // log_labels matrix in the constructor.
-  auto *plot = new DataPlot1D(position, "Quaternion errors", -1, 1);
-  // plot->AddCurve(state->Element(3), DataPlot::Red);   
-  plot->AddCurve(state->Element(4), DataPlot::Black); 
-  plot->AddCurve(state->Element(5), DataPlot::Blue);  
-  plot->AddCurve(state->Element(6), DataPlot::Green); 
-}
 
 void MyController::applyMotorConstant(Vector3Df &signal) {
   auto motor_constant = (float)k_motor->Value();
