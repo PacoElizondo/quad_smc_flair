@@ -27,6 +27,7 @@
 #include <Pid.h>
 #include <PushButton.h>
 #include <Tab.h>
+#include <TabWidget.h>
 #include <TargetController.h>
 #include <TrajectoryGenerator2DCircle.h>
 #include <Uav.h>
@@ -127,6 +128,13 @@ quadsmc::quadsmc(TargetController *controller)
   Tab *setup_custom_controller =
       new Tab(getFrameworkManager()->GetTabWidget(), "Custom controller");
   myCtrl = new MyController(setup_custom_controller->At(0, 0), "Controller");
+  // auto *TabWidget = new TabWidget(setup_custom_controller->NewRow(), "Error Plots");
+  // auto graphLawTab = new Tab(TabWidget, "plot error");
+  // auto graphLawTab2 = new Tab(TabWidget, "plot surface");
+  // myCtrl->UseDefaultPlot(graphLawTab->At(0,0));
+
+
+  
 
   Tab *setup_path_planner =
       new Tab(getFrameworkManager()->GetTabWidget(), "Path planner");
