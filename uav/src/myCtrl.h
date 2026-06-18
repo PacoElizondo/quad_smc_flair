@@ -64,8 +64,8 @@ private:
   float thrust_curr;
   float current_time;
 
-  void plotCartesianErrors(const flair::gui::LayoutPosition *position);
-  void plotQuaternionErrors(const flair::gui::LayoutPosition *position);
+  void plotControllerData(const flair::gui::LayoutPosition *position);
+  
 };
 } // namespace filter
 } // namespace flair

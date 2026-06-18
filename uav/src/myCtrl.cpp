@@ -2,6 +2,7 @@
 
 #include "myCtrl.h"
 #include <CheckBox.h>
+#include <DataPlot.h>
 #include <DataPlot1D.h>
 #include <DoubleSpinBox.h>
 #include <Euler.h>
@@ -17,6 +18,7 @@
 #include <Vector3D.h>
 #include <Vector3DSpinBox.h>
 #include <cmath>
+#include <FrameworkManager.h>
 #include <cstdlib>
 #include <iostream>
 
@@ -34,13 +36,13 @@ MyController::MyController(const LayoutPosition *position, const string &name)
 
   // Matrix descriptor for logging. It should be always a nx1 matrix.
   auto *log_labels = new MatrixDescriptor(11, 1);
-  log_labels->SetElementName(0, 0, "x_error");
-  log_labels->SetElementName(1, 0, "y_error");
-  log_labels->SetElementName(2, 0, "z_error");
+  log_labels->SetElementName(0, 0, "x_e");
+  log_labels->SetElementName(1, 0, "y_e");
+  log_labels->SetElementName(2, 0, "z_e");
   log_labels->SetElementName(3, 0, "q0_e");
-  log_labels->SetElementName(4, 0, "q1_e");
-  log_labels->SetElementName(5, 0, "q2_e");
-  log_labels->SetElementName(6, 0, "q3_e");
+  log_labels->SetElementName(4, 0, "pitch_e");
+  log_labels->SetElementName(5, 0, "roll_e");
+  log_labels->SetElementName(6, 0, "yaw_e");
   log_labels->SetElementName(7, 0, "tau_x"); 
   log_labels->SetElementName(8, 0, "tau_y"); 
   log_labels->SetElementName(9, 0, "tau_z"); 
@@ -48,6 +50,8 @@ MyController::MyController(const LayoutPosition *position, const string &name)
 
   state = new Matrix(this, log_labels, floatType, name);
   delete log_labels;
+
+  
 
   // GUI for custom controller
   auto *gui_quadsmc = new GroupBox(position, name);
@@ -89,9 +93,11 @@ MyController::MyController(const LayoutPosition *position, const string &name)
 
   
   // Show cartesian errors plot
-  plotCartesianErrors(gui_quadsmc->NewRow());
+  Tab *plot_tab =
+      new Tab(getFrameworkManager()->GetTabWidget(), "Plots");
   
-  // plotQuaternionErrors(gui_quadsmc->NewRow());
+  plotControllerData(plot_tab->LastRowLastCol());
+  
   
   AddDataToLog(state);
 }
@@ -315,19 +321,27 @@ void MyController::SetValues(const Vector3Df &pos_error,
   input->ReleaseMutex();
 }
 
-void MyController::plotCartesianErrors(const LayoutPosition *position) {
+void MyController::plotControllerData(const LayoutPosition *position) {
 
-  auto *cartesian_tab = new TabWidget(position, "Errors");
-  auto graphLawTab = new Tab(cartesian_tab, "plot error");
-  auto *plot_cartesian_error = new DataPlot1D(graphLawTab->LastRowLastCol(), "Cartesian errors", -1, 1);
+  auto *controller_plots_tab = new TabWidget(position, "Controller plots");
+  auto graphErrorTab = new Tab(controller_plots_tab, "Tracking Errors");
+  auto *plot_cartesian_error = new DataPlot1D(graphErrorTab->LastRowLastCol(), "Cartesian errors", -1, 1);
   plot_cartesian_error->AddCurve(state->Element(0), DataPlot::Red);   // x error
   plot_cartesian_error->AddCurve(state->Element(1), DataPlot::Black); // y error
   plot_cartesian_error->AddCurve(state->Element(2), DataPlot::Blue);  // z error
-  auto *plot_attitude_error = new DataPlot1D(graphLawTab->LastRowLastCol(), "Quaternion errors", -1, 1);
+  auto *plot_attitude_error = new DataPlot1D(graphErrorTab->LastRowLastCol(), "Attitude errors", -1, 1);
   plot_attitude_error->AddCurve(state->Element(4), DataPlot::Red);   
   plot_attitude_error->AddCurve(state->Element(5), DataPlot::Black); 
   plot_attitude_error->AddCurve(state->Element(6), DataPlot::Blue);  
 
+//   auto *input_tab = new TabWidget(position, "Input" );
+  auto graphControllerTab = new Tab(controller_plots_tab, "Controller Input");
+  auto *plot_controller_thrust = new DataPlot1D(graphControllerTab->LastRowLastCol(), "Thrust Input", -1, 1);  // with no motor constant
+  plot_controller_thrust->AddCurve(state->Element(10), DataPlot::Black);
+  auto *plot_controller_torque = new DataPlot1D(graphControllerTab->LastRowLastCol(), "Torque Input", -1, 1); 
+  plot_controller_torque->AddCurve(state->Element(7), DataPlot::Red); 
+  plot_controller_torque->AddCurve(state->Element(8), DataPlot::Black);
+  plot_controller_torque->AddCurve(state->Element(9), DataPlot::Blue);
 }
 
 
