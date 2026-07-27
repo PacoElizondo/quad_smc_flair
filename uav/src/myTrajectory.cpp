@@ -283,70 +283,98 @@ MyTrajectory::TrajectoryOutput MyTrajectory::ComputeTanhInterpolation(const Traj
 
 MyTrajectory::TrajectoryOutput MyTrajectory::ComputeFixedJerkInterpolation(const TrajectoryContext& ctx) {
     TrajectoryOutput out;
-    PlannedTrajectory traj;
-    const float V_MAX  = 1.0;
-    const float A_MAX  = 2.0;
-    const float J_FIX  = 4.0;
-    const float T_WAIT = 1.0;
-    const float DT     = 0.001F;
-    float t      = ctx.current_time;
-    float a      = ctx.amplitude;
-    float mh     = ctx.min_height;
-    
 
-    static const std::vector<Vector3Df> waypoints = []() {
+    // Hardcoded destination waypoints (without the start)
+    static const std::vector<Vector3Df> destination_waypoints = []() {
         std::vector<Vector3Df> pts;
         int n_pts = 6;
         for (int i = 0; i < n_pts; ++i) {
             double t = i * (2.0 * M_PI / (n_pts - 1));
-            pts.push_back({float(std::cos(t)), float(std::sin(t)), float(t / (2.0 * M_PI))});
+            pts.push_back({float(std::cos(t)), float(std::sin(t)), float(- t / (2.0 * M_PI) - 0.2F )});
         }
-        pts.push_back({1.0f, 1.0f, 0.1f});
-        pts.push_back({1.0f, 1.5f, 0.1f});
+        pts.push_back({2.0f, 1.0f, -0.2f});
+        pts.push_back({2.0f, -1.5f, -0.2f});
         return pts;
     }();
 
+    const float V_MAX  = 2.0f;
+    const float A_MAX  = 5.0f;
+    const float J_FIX  = 2.0f;
+    const float T_WAIT = 2.0f;
+    const float DT    = 0.001f;
+
+    // --- First call: build full trajectory starting from current position ---
     if (!jerk_traj_initialized) {
+        // Read current position from input (drone state)
+        Vector3Df pos_now(input->Value(0, 0), input->Value(1, 0), input->Value(2, 0));
+        float yaw_start = input->Value(3, 0);
+        // Prepend current position to the hardcoded waypoints
+        std::vector<Vector3Df> waypoints;
+        waypoints.push_back(pos_now);
+        waypoints.insert(waypoints.end(), destination_waypoints.begin(), destination_waypoints.end());
+
         planned_traj_jerk = build_trajectory(waypoints, V_MAX, A_MAX, J_FIX, T_WAIT, DT);
         jerk_start_time = ctx.current_time;
         jerk_traj_initialized = true;
     }
 
-      float t_local = ctx.current_time - jerk_start_time;
+    // --- Sample the precomputed trajectory at current local time ---
+    float t_local = ctx.current_time - jerk_start_time;
     float total_time = planned_traj_jerk.total_time;
 
-    // If trajectory finished, hold the final position
     if (t_local >= total_time || total_time <= 0.0f) {
-        // Use the last computed position (end of trajectory)
-        size_t last_idx = planned_traj_jerk.pos.size() - 1;
-        out.position = planned_traj_jerk.pos[last_idx];
+        // Trajectory finished – hold at the final waypoint
+        size_t last = planned_traj_jerk.pos.size() - 1;
+        out.position = planned_traj_jerk.pos[last];
         out.velocity = Vector3Df(0.0f, 0.0f, 0.0f);
         out.acceleration = Vector3Df(0.0f, 0.0f, 0.0f);
-
-        // Heading: you can set it to the last heading or keep it constant.
-        // Here we simply point to the next waypoint's direction (or 0).
-        out.heading = 0.0f;
+        out.heading = 0.0f;   // or keep last heading
     } else {
-        // Linear interpolation between samples (simple nearest neighbour is fine at 1 kHz)
         int idx = static_cast<int>(t_local / DT);
         if (idx < 0) idx = 0;
-        if (idx >= static_cast<int>(planned_traj_jerk.pos.size()))
-            idx = planned_traj_jerk.pos.size() - 1;
+        if (idx >= (int)planned_traj_jerk.pos.size()) idx = planned_traj_jerk.pos.size() - 1;
 
         out.position = planned_traj_jerk.pos[idx];
         out.velocity = planned_traj_jerk.vel[idx];
         out.acceleration = planned_traj_jerk.acc[idx];
+        if (planned_traj_jerk.vel[idx].x > A_MAX) {std::cout << "A\n";}
 
-        // Heading: a smooth tanh transition as in your other functions
-        // (you can replace with a simple constant if desired)
-        float yaw_start = input->Value(3, 0);   // current yaw from drone
-        float yaw_end = atan2f(
-            waypoints.back().y - waypoints.front().y,
-            waypoints.back().x - waypoints.front().x);  // example: point toward final wp
-        float th = tanhf(t_local * 1.0f - 2.0f);
-        out.heading = yaw_start + (0.5f + 0.5f * th) * (yaw_end - yaw_start);
+        // Desired heading = direction of velocity (tangent to path)
+        float vx = planned_traj_jerk.vel[idx].x;
+        float vy = planned_traj_jerk.vel[idx].y;
+        float speed_xy = std::sqrt(vx * vx + vy * vy);
+
+        float desired_heading;
+        if (speed_xy > 0.001f) {
+            desired_heading = std::atan2(vy, vx);
+        } else {
+            // When stationary, hold the last filtered heading
+            desired_heading = filtered_heading;
+        }
+
+        // First call: initialise the filter
+        if (!heading_filter_initialized) {
+            filtered_heading = desired_heading;
+            heading_filter_initialized = true;
+        }
+
+        // Low‑pass filter time constant (in seconds)
+        const float tau = 0.5f;   // adjust to make the response faster/slower
+        float alpha = ctx.delta_time / (tau + ctx.delta_time);
+
+        // Compute shortest angular difference (wrap‑safe)
+        float diff = desired_heading - filtered_heading;
+        while (diff >  M_PI) diff -= 2.0f * M_PI;
+        while (diff < -M_PI) diff += 2.0f * M_PI;
+
+        filtered_heading += alpha * diff;
+
+        // Keep filtered_heading inside [-π, π]
+        while (filtered_heading >  M_PI) filtered_heading -= 2.0f * M_PI;
+        while (filtered_heading < -M_PI) filtered_heading += 2.0f * M_PI;
+
+        out.heading = filtered_heading;
     }
-
 
     return out;
 }
@@ -382,6 +410,8 @@ void MyTrajectory::Reset(void) {
     m_prev = 0;     
     jerk_traj_initialized = false;
     planned_traj_jerk = PlannedTrajectory();
+    bool heading_filter_initialized = false;
+    float filtered_heading = 0.0f;    // stored in radians, always unwrapped
 }
 
 void MyTrajectory::SetValues(const Vector3Df &Pos_0, const float &Yaw_0) {
@@ -436,36 +466,32 @@ void MyTrajectory::Phase::eval(float t_local, float& a, float& v, float& p) cons
 
 MyTrajectory::Ramp MyTrajectory::ramp_params(float delta_v, float acc_max, float jerk) {
     Ramp params;
-    if (delta_v <= 0.0) {
-        params.acc_peak = 0.0F;
-        params.rise_time = 0.0F;
-        params.limit_time = 0.0F;
-        params.total_time = 0.0F;
-        return {params};
+    if (delta_v <= 0.0f) {
+        // No velocity change needed – all zeros
+        params.acc_peak = 0.0f;
+        params.rise_time = 0.0f;
+        params.limit_time = 0.0f;
+        params.total_time = 0.0f;
+        return params;
     }
 
     float rise_time = acc_max / jerk;
     float limit_time = delta_v / acc_max;
 
-    float a_pk, rt, lt, tt;
-
-    if (limit_time >= rise_time) {
-        a_pk = acc_max;
-        rt = rise_time;
-        lt = limit_time;
-        tt = rt + lt;
-    } else {
-        a_pk = std::sqrt(delta_v * jerk);
-        rt = a_pk / jerk;
-        lt = rt;
-        tt = 2.0 * rt;
+    if (limit_time >= rise_time) {   // Trapezoidal
+        params.acc_peak = acc_max;
+        params.rise_time = rise_time;
+        params.limit_time = limit_time;
+        params.total_time = rise_time + limit_time;
+    } else {                         // Triangular
+        float a_pk = std::sqrt(delta_v * jerk);
+        params.acc_peak = a_pk;
+        params.rise_time = a_pk / jerk;
+        params.limit_time = params.rise_time;      // same as rise_time
+        params.total_time = 2.0f * params.rise_time;
     }
-    params.acc_peak = 0.0F;
-    params.rise_time = 0.0F;
-    params.limit_time = 0.0F;
-    params.total_time = 0.0F;
 
-    return {params};
+    return params;
 }
 
 void MyTrajectory::eval_ramp(float t, const Ramp& params, float& a, float& v, float& p) {

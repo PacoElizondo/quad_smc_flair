@@ -140,7 +140,8 @@ private:
   flair::gui::GroupBox *traj_selection_box;
   flair::gui::ComboBox *traj_selection;
   float m_prev;
-
+  bool heading_filter_initialized = false;
+  float filtered_heading = 0.0f;    // stored in radians, always unwrapped
 
     // For the fixed‑jerk trajectory
     bool jerk_traj_initialized = false;
