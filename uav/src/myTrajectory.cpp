@@ -283,17 +283,18 @@ MyTrajectory::TrajectoryOutput MyTrajectory::ComputeTanhInterpolation(const Traj
 
 MyTrajectory::TrajectoryOutput MyTrajectory::ComputeFixedJerkInterpolation(const TrajectoryContext& ctx) {
     TrajectoryOutput out;
-
+    float min_height = ctx.min_height;
     // Hardcoded destination waypoints (without the start)
     static const std::vector<Vector3Df> destination_waypoints = []() {
+        
         std::vector<Vector3Df> pts;
         int n_pts = 6;
         for (int i = 0; i < n_pts; ++i) {
             double t = i * (2.0 * M_PI / (n_pts - 1));
-            pts.push_back({float(std::cos(t)), float(std::sin(t)), float(- t / (2.0 * M_PI) - 0.2F )});
+            pts.push_back({float(std::cos(t)), float(std::sin(t)), float(- t / (2.0 * M_PI))});
         }
-        pts.push_back({2.0f, 1.0f, -0.2f});
-        pts.push_back({2.0f, -1.5f, -0.2f});
+        pts.push_back({2.0f,  1.0f, 0.0f});
+        pts.push_back({2.0f, -1.5f, 0.0f});
         return pts;
     }();
 
@@ -312,8 +313,8 @@ MyTrajectory::TrajectoryOutput MyTrajectory::ComputeFixedJerkInterpolation(const
         std::vector<Vector3Df> waypoints;
         waypoints.push_back(pos_now);
         waypoints.insert(waypoints.end(), destination_waypoints.begin(), destination_waypoints.end());
-
         planned_traj_jerk = build_trajectory(waypoints, V_MAX, A_MAX, J_FIX, T_WAIT, DT);
+        planned_traj_jerk.pos[planned_traj_jerk.pos.size()-1].z += -min_height;
         jerk_start_time = ctx.current_time;
         jerk_traj_initialized = true;
     }
@@ -321,19 +322,19 @@ MyTrajectory::TrajectoryOutput MyTrajectory::ComputeFixedJerkInterpolation(const
     // --- Sample the precomputed trajectory at current local time ---
     float t_local = ctx.current_time - jerk_start_time;
     float total_time = planned_traj_jerk.total_time;
-
+    
     if (t_local >= total_time || total_time <= 0.0f) {
         // Trajectory finished – hold at the final waypoint
         size_t last = planned_traj_jerk.pos.size() - 1;
         out.position = planned_traj_jerk.pos[last];
         out.velocity = Vector3Df(0.0f, 0.0f, 0.0f);
         out.acceleration = Vector3Df(0.0f, 0.0f, 0.0f);
-        out.heading = 0.0f;   // or keep last heading
+        out.heading = filtered_heading;   // or keep last heading
     } else {
         int idx = static_cast<int>(t_local / DT);
         if (idx < 0) idx = 0;
         if (idx >= (int)planned_traj_jerk.pos.size()) idx = planned_traj_jerk.pos.size() - 1;
-
+        planned_traj_jerk.pos[idx].z += -min_height;
         out.position = planned_traj_jerk.pos[idx];
         out.velocity = planned_traj_jerk.vel[idx];
         out.acceleration = planned_traj_jerk.acc[idx];
